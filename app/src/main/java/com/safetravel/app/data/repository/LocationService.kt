@@ -1,15 +1,15 @@
-package com.example.test
+package com.safetravel.app.data.repository
 
 import android.annotation.SuppressLint
 import android.content.Context
 import android.location.Location
 import android.os.Looper
 import com.google.android.gms.location.*
+import com.google.android.gms.tasks.Task
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
 class LocationService(private val context: Context) {
     private val fusedLocationClient: FusedLocationProviderClient =
@@ -51,7 +51,7 @@ class LocationService(private val context: Context) {
     }
 }
 
-suspend fun <T> com.google.android.gms.tasks.Task<T>.await(): T? = suspendCoroutine { continuation ->
+suspend fun <T> Task<T>.await(): T? = suspendCoroutine { continuation ->
     addOnSuccessListener { result ->
         continuation.resume(result)
     }

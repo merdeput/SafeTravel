@@ -1,4 +1,4 @@
-package com.example.test
+package com.safetravel.app.ui.sos
 
 import android.annotation.SuppressLint
 import android.content.Context
@@ -18,6 +18,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import java.text.SimpleDateFormat
+import java.util.Locale
 import kotlin.math.*
 
 @Composable
@@ -158,7 +160,7 @@ fun AlertStatusCard(
             if (accidentDetected) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Time: ${java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(detectionTime)}",
+                    text = "Time: ${SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(detectionTime)}",
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Spacer(modifier = Modifier.height(16.dp))

@@ -1,6 +1,7 @@
-package com.example.test
+package com.safetravel.app.ui.common
 
 import android.content.Context
+import android.content.pm.PackageManager
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -177,7 +178,7 @@ private fun getApiKey(context: Context): String {
     return try {
         val appInfo = context.packageManager.getApplicationInfo(
             context.packageName,
-            android.content.pm.PackageManager.GET_META_DATA
+            PackageManager.GET_META_DATA
         )
         appInfo.metaData.getString("com.google.android.geo.API_KEY") ?: ""
     } catch (e: Exception) {

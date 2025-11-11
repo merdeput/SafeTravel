@@ -1,4 +1,4 @@
-package com.example.test
+package com.safetravel.app
 
 import org.junit.Test
 

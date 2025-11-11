@@ -1,4 +1,4 @@
-package com.example.test
+package com.safetravel.app.data.repository
 
 import android.content.Context
 import android.location.Address

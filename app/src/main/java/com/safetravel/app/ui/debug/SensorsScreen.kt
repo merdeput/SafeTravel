@@ -1,4 +1,4 @@
-package com.example.test
+package com.safetravel.app.ui.debug
 
 import android.annotation.SuppressLint
 import android.content.Context
@@ -12,7 +12,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
