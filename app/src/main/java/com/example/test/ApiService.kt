@@ -27,7 +27,7 @@ interface ApiService {
 }
 
 object ApiClient {
-    private const val BASE_URL = "http://172.20.10.2:5000/" // Change this!
+    private const val BASE_URL = "http://192.168.1.127:5000/" // Change this!
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY

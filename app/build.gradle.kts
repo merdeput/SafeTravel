@@ -11,7 +11,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.test"
-        minSdk = 24
+        minSdk = 26
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
@@ -64,6 +64,7 @@ dependencies {
 
     // Permissions
     implementation("com.google.accompanist:accompanist-permissions:0.34.0")
+    implementation("androidx.navigation:navigation-compose:2.7.5")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

@@ -7,11 +7,19 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
 import com.example.test.ui.theme.TestTheme
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
@@ -29,7 +37,85 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             TestTheme {
+                MainScreen()
+            }
+        }
+    }
+}
+
+sealed class Screen(val route: String, val title: String) {
+    object Location : Screen("location", "Location")
+    object Sensors : Screen("sensors", "Sensors")
+    object AccidentDetection : Screen("accident", "Accident Detection")
+}
+
+@Composable
+fun MainScreen() {
+    val navController = rememberNavController()
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+
+    Scaffold(
+        bottomBar = {
+            NavigationBar {
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.LocationOn, contentDescription = "Location") },
+                    label = { Text("Location") },
+                    selected = currentRoute == Screen.Location.route,
+                    onClick = {
+                        navController.navigate(Screen.Location.route) {
+                            popUpTo(navController.graph.startDestinationId) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                )
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.Warning, contentDescription = "Accident Detection") },
+                    label = { Text("Detection") },
+                    selected = currentRoute == Screen.AccidentDetection.route,
+                    onClick = {
+                        navController.navigate(Screen.AccidentDetection.route) {
+                            popUpTo(navController.graph.startDestinationId) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                )
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.Settings, contentDescription = "Sensors") },
+                    label = { Text("Sensors") },
+                    selected = currentRoute == Screen.Sensors.route,
+                    onClick = {
+                        navController.navigate(Screen.Sensors.route) {
+                            popUpTo(navController.graph.startDestinationId) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                )
+            }
+        }
+    ) { paddingValues ->
+        NavHost(
+            navController = navController,
+            startDestination = Screen.AccidentDetection.route,
+            modifier = Modifier.padding(paddingValues)
+        ) {
+            composable(Screen.Location.route) {
                 LocationMapScreen()
+            }
+            composable(Screen.AccidentDetection.route) {
+                AccidentDetectionScreen()
+            }
+            composable(Screen.Sensors.route) {
+                SensorsScreen()
             }
         }
     }
@@ -111,177 +197,171 @@ fun LocationMapScreen() {
         }
     }
 
-    Scaffold(
+    Column(
         modifier = Modifier.fillMaxSize()
-    ) { padding ->
-        Column(
+    ) {
+        // Top section: Current location display
+        Card(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
+                .fillMaxWidth()
+                .padding(8.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
         ) {
-            // Top section: Current location display
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+            Column(
+                modifier = Modifier.padding(16.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    Text(
-                        text = "Current Location",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    if (currentLocation != null) {
-                        Text("Lat: ${String.format("%.6f", currentLocation!!.latitude)}")
-                        Text("Lng: ${String.format("%.6f", currentLocation!!.longitude)}")
-                        locationAccuracy?.let {
-                            Text("Accuracy: ${String.format("%.1f", it)}m")
-                        }
-                    } else {
-                        Text("Waiting for location...")
+                Text(
+                    text = "Current Location",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                if (currentLocation != null) {
+                    Text("Lat: ${String.format("%.6f", currentLocation!!.latitude)}")
+                    Text("Lng: ${String.format("%.6f", currentLocation!!.longitude)}")
+                    locationAccuracy?.let {
+                        Text("Accuracy: ${String.format("%.1f", it)}m")
                     }
+                } else {
+                    Text("Waiting for location...")
                 }
             }
+        }
 
-            // Search bar
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-            ) {
-                PlacesSearchBar(
-                    onPlaceSelected = { latLng, placeName ->
-                        // Add marker
-                        markers = markers + MarkerData(latLng, placeName)
+        // Search bar
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        ) {
+            PlacesSearchBar(
+                onPlaceSelected = { latLng, placeName ->
+                    // Add marker
+                    markers = markers + MarkerData(latLng, placeName)
 
-                        // Move camera to selected place
-                        cameraPositionState.position = CameraPosition.fromLatLngZoom(latLng, 15f)
+                    // Move camera to selected place
+                    cameraPositionState.position = CameraPosition.fromLatLngZoom(latLng, 15f)
 
-                        // Send to server
+                    // Send to server
+                    scope.launch {
+                        try {
+                            val locationData = LocationData(
+                                type = "search_location",
+                                coordinates = Coordinates(latLng.latitude, latLng.longitude),
+                                timestamp = getCurrentTimestamp(),
+                                placeName = placeName
+                            )
+                            val response = ApiClient.apiService.sendLocation(locationData)
+                            if (response.isSuccessful) {
+                                logMessages = logMessages + "✓ Search: $placeName"
+                                Toast.makeText(context, "Location sent: $placeName", Toast.LENGTH_SHORT).show()
+                            }
+                        } catch (e: Exception) {
+                            logMessages = logMessages + "✗ Search error: ${e.message}"
+                        }
+                    }
+                },
+                modifier = Modifier.padding(16.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Middle section: Google Map
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+        ) {
+            GoogleMap(
+                modifier = Modifier.fillMaxSize(),
+                cameraPositionState = cameraPositionState,
+                properties = MapProperties(isMyLocationEnabled = permissionsState.allPermissionsGranted),
+                uiSettings = MapUiSettings(zoomControlsEnabled = true),
+                onMapClick = { latLng ->
+                    if (!isProcessingTap) {
+                        isProcessingTap = true
+
+                        // Show immediate feedback
+                        Toast.makeText(context, "Getting location info...", Toast.LENGTH_SHORT).show()
+
                         scope.launch {
                             try {
+                                // Get address from coordinates (reverse geocoding)
+                                val placeName = geocodingService.getAddressFromLatLng(latLng)
+
+                                // Add marker with place name
+                                markers = markers + MarkerData(latLng, placeName)
+
+                                // Send to server
                                 val locationData = LocationData(
-                                    type = "search_location",
+                                    type = "tap_location",
                                     coordinates = Coordinates(latLng.latitude, latLng.longitude),
                                     timestamp = getCurrentTimestamp(),
                                     placeName = placeName
                                 )
                                 val response = ApiClient.apiService.sendLocation(locationData)
+
                                 if (response.isSuccessful) {
-                                    logMessages = logMessages + "✓ Search: $placeName"
+                                    logMessages = logMessages + "✓ Tap: $placeName"
                                     Toast.makeText(context, "Location sent: $placeName", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    logMessages = logMessages + "✗ Failed: ${response.code()}"
                                 }
                             } catch (e: Exception) {
-                                logMessages = logMessages + "✗ Search error: ${e.message}"
-                            }
-                        }
-                    },
-                    modifier = Modifier.padding(16.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Middle section: Google Map
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-            ) {
-                GoogleMap(
-                    modifier = Modifier.fillMaxSize(),
-                    cameraPositionState = cameraPositionState,
-                    properties = MapProperties(isMyLocationEnabled = permissionsState.allPermissionsGranted),
-                    uiSettings = MapUiSettings(zoomControlsEnabled = true),
-                    onMapClick = { latLng ->
-                        if (!isProcessingTap) {
-                            isProcessingTap = true
-
-                            // Show immediate feedback
-                            Toast.makeText(context, "Getting location info...", Toast.LENGTH_SHORT).show()
-
-                            scope.launch {
-                                try {
-                                    // Get address from coordinates (reverse geocoding)
-                                    val placeName = geocodingService.getAddressFromLatLng(latLng)
-
-                                    // Add marker with place name
-                                    markers = markers + MarkerData(latLng, placeName)
-
-                                    // Send to server
-                                    val locationData = LocationData(
-                                        type = "tap_location",
-                                        coordinates = Coordinates(latLng.latitude, latLng.longitude),
-                                        timestamp = getCurrentTimestamp(),
-                                        placeName = placeName
-                                    )
-                                    val response = ApiClient.apiService.sendLocation(locationData)
-
-                                    if (response.isSuccessful) {
-                                        logMessages = logMessages + "✓ Tap: $placeName"
-                                        Toast.makeText(context, "Location sent: $placeName", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        logMessages = logMessages + "✗ Failed: ${response.code()}"
-                                    }
-                                } catch (e: Exception) {
-                                    logMessages = logMessages + "✗ Tap error: ${e.message}"
-                                    Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-                                } finally {
-                                    isProcessingTap = false
-                                }
+                                logMessages = logMessages + "✗ Tap error: ${e.message}"
+                                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                            } finally {
+                                isProcessingTap = false
                             }
                         }
                     }
-                ) {
-                    // Draw markers
-                    markers.forEach { markerData ->
-                        Marker(
-                            state = MarkerState(position = markerData.position),
-                            title = markerData.title,
-                            snippet = "Lat: ${String.format("%.4f", markerData.position.latitude)}, " +
-                                    "Lng: ${String.format("%.4f", markerData.position.longitude)}"
-                        )
-                    }
                 }
-
-                // Loading indicator when processing tap
-                if (isProcessingTap) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .wrapContentSize()
-                    ) {
-                        CircularProgressIndicator()
-                    }
+            ) {
+                // Draw markers
+                markers.forEach { markerData ->
+                    Marker(
+                        state = MarkerState(position = markerData.position),
+                        title = markerData.title,
+                        snippet = "Lat: ${String.format("%.4f", markerData.position.latitude)}, " +
+                                "Lng: ${String.format("%.4f", markerData.position.longitude)}"
+                    )
                 }
             }
 
-            // Bottom section: Log area
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(120.dp)
-                    .padding(8.dp)
-            ) {
-                Column(
+            // Loading indicator when processing tap
+            if (isProcessingTap) {
+                Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(8.dp)
+                        .wrapContentSize()
                 ) {
+                    CircularProgressIndicator()
+                }
+            }
+        }
+
+        // Bottom section: Log area
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(120.dp)
+                .padding(8.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(8.dp)
+            ) {
+                Text(
+                    text = "Activity Log:",
+                    style = MaterialTheme.typography.labelMedium
+                )
+                logMessages.takeLast(3).forEach { message ->
                     Text(
-                        text = "Activity Log:",
-                        style = MaterialTheme.typography.labelMedium
+                        text = message,
+                        style = MaterialTheme.typography.bodySmall
                     )
-                    logMessages.takeLast(3).forEach { message ->
-                        Text(
-                            text = message,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
                 }
             }
         }
