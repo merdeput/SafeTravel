@@ -7,20 +7,21 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 
 @Composable
-fun LoginScreen(
-    viewModel: LoginViewModel = hiltViewModel(),
-    onLoginSuccess: () -> Unit,
-    onNavigateToRegister: () -> Unit
+fun RegisterScreen(
+    viewModel: RegisterViewModel = hiltViewModel(),
+    onRegistrationSuccess: () -> Unit,
+    onNavigateToLogin: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    LaunchedEffect(uiState.loginSuccess) {
-        if (uiState.loginSuccess) {
-            onLoginSuccess()
+    LaunchedEffect(uiState.registrationSuccess) {
+        if (uiState.registrationSuccess) {
+            onRegistrationSuccess()
         }
     }
 
@@ -35,7 +36,7 @@ fun LoginScreen(
         Box(modifier = Modifier.size(150.dp)) // Replace with your Image()
 
         Text(
-            text = "Welcome Back",
+            text = "Create Your Account",
             style = MaterialTheme.typography.headlineMedium,
             modifier = Modifier.padding(top = 24.dp, bottom = 24.dp)
         )
@@ -54,8 +55,16 @@ fun LoginScreen(
             visualTransformation = PasswordVisualTransformation(),
             modifier = Modifier.fillMaxWidth()
         )
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedTextField(
+            value = uiState.confirmPassword,
+            onValueChange = viewModel::onConfirmPasswordChange,
+            label = { Text("Confirm Password") },
+            visualTransformation = PasswordVisualTransformation(),
+            modifier = Modifier.fillMaxWidth()
+        )
 
-        uiState.loginError?.let {
+        uiState.registrationError?.let {
             Text(
                 text = it,
                 color = MaterialTheme.colorScheme.error,
@@ -69,16 +78,16 @@ fun LoginScreen(
             CircularProgressIndicator()
         } else {
             Button(
-                onClick = viewModel::onLoginClick,
+                onClick = viewModel::onRegisterClick,
                 modifier = Modifier.fillMaxWidth(),
                 enabled = uiState.email.isNotBlank() && uiState.password.isNotBlank()
             ) {
-                Text("Login")
+                Text("Register")
             }
         }
 
-        TextButton(onClick = onNavigateToRegister, modifier = Modifier.padding(top = 24.dp)) {
-            Text("Don't have an account? Register")
+        TextButton(onClick = onNavigateToLogin, modifier = Modifier.padding(top = 24.dp)) {
+            Text("Already have an account? Login")
         }
     }
 }
