@@ -17,6 +17,7 @@ import com.safetravel.app.ui.createtrip.LocationPickerScreen
 import com.safetravel.app.ui.home.MainScreen
 import com.safetravel.app.ui.login.LoginScreen
 import com.safetravel.app.ui.login.RegisterScreen
+import com.safetravel.app.ui.profile.ContactsScreen
 import com.safetravel.app.ui.profile.ProfileScreen
 import com.safetravel.app.ui.sos.AiHelpScreen
 import com.safetravel.app.ui.theme.TestTheme
@@ -59,7 +60,13 @@ fun AppNavigation() {
         composable("profile") {
             ProfileScreen(
                 onCreateTrip = { navController.navigate("create_trip") },
-                onTripClick = { /* TODO */ }
+                onManageContacts = { navController.navigate("contacts") } // Navigate to the new screen
+            )
+        }
+
+        composable("contacts") {
+            ContactsScreen(
+                onNavigateUp = { navController.popBackStack() }
             )
         }
 

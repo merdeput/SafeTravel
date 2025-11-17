@@ -4,7 +4,10 @@ import androidx.lifecycle.ViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import javax.inject.Inject
+
+// This ViewModel is now only responsible for the Profile Screen's data
 
 data class Trip(
     val id: String,
@@ -13,7 +16,7 @@ data class Trip(
 )
 
 data class ProfileUiState(
-    val userName: String = "Jane Doe", // Dummy data
+    val userName: String = "Jane Doe",
     val trips: List<Trip> = emptyList()
 )
 
@@ -24,13 +27,13 @@ class ProfileViewModel @Inject constructor() : ViewModel() {
     val uiState = _uiState.asStateFlow()
 
     init {
-        // Load dummy trip data
-        _uiState.value = _uiState.value.copy(
-            trips = listOf(
-                Trip("1", "Paris, France", "2024-12-20"),
-                Trip("2", "Tokyo, Japan", "2025-01-15"),
-                Trip("3", "New York, USA", "2025-03-10")
+        _uiState.update {
+            it.copy(
+                trips = listOf(
+                    Trip("1", "Paris, France", "2024-12-20"),
+                    Trip("2", "Tokyo, Japan", "2025-01-15"),
+                )
             )
-        )
+        }
     }
 }

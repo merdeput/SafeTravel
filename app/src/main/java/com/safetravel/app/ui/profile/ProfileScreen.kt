@@ -5,6 +5,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -20,7 +21,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 fun ProfileScreen(
     viewModel: ProfileViewModel = hiltViewModel(),
     onCreateTrip: () -> Unit,
-    onTripClick: (String) -> Unit // Will be used later to view trip details
+    onManageContacts: () -> Unit // Clean navigation callback
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -29,6 +30,9 @@ fun ProfileScreen(
             TopAppBar(
                 title = { Text("My Profile") },
                 actions = {
+                    IconButton(onClick = onManageContacts) {
+                        Icon(Icons.Default.Contacts, contentDescription = "Manage Contacts")
+                    }
                     IconButton(onClick = { /* TODO: Settings screen */ }) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings")
                     }
@@ -55,8 +59,8 @@ fun ProfileScreen(
                 Text("You haven't planned any trips yet.", modifier = Modifier.align(Alignment.CenterHorizontally))
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(uiState.trips) {
-                        TripItem(trip = it, onClick = { onTripClick(it.id) })
+                    items(uiState.trips) { trip ->
+                        TripItem(trip = trip, onClick = { /* TODO: Navigate to trip details */ })
                     }
                 }
             }
