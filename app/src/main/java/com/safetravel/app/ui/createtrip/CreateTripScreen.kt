@@ -6,7 +6,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -14,8 +14,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.viewmodel.compose.viewModel
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -23,19 +23,10 @@ import java.util.Date
 fun CreateTripScreen(
     viewModel: CreateTripViewModel = hiltViewModel(),
     onStartTrip: () -> Unit,
-    onNavigateToLocationPicker: () -> Unit,
-    initialLocation: String? = null
+    onNavigateToLocationPicker: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val locationViewModel: LocationPickerViewModel = viewModel()
     var showDatePicker by remember { mutableStateOf(false) }
-
-    // Set initial location if provided from map picker
-    LaunchedEffect(initialLocation) {
-        initialLocation?.let {
-            viewModel.onWhereChange(it)
-        }
-    }
 
     Scaffold(
         topBar = {
@@ -50,67 +41,20 @@ fun CreateTripScreen(
         ) {
             Spacer(modifier = Modifier.height(16.dp))
 
-            // --- Destination Input with Autocomplete and Map Icon ---
-            val locationUiState by locationViewModel.uiState.collectAsState()
-
+            // --- Input Form ---
             OutlinedTextField(
-                value = locationUiState.searchQuery,
-                onValueChange = { newValue ->
-                    locationViewModel.onSearchQueryChange(newValue)
-                    viewModel.onWhereChange(newValue)
-                },
+                value = uiState.where,
+                onValueChange = viewModel::onWhereChange, // Allow user to type manually
                 label = { Text("Where are you going?") },
                 modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                 trailingIcon = {
-                    IconButton(onClick = onNavigateToLocationPicker) {
-                        Icon(
-                            imageVector = Icons.Default.LocationOn,
-                            contentDescription = "Pick location on map",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Default.Place,
+                        contentDescription = "Select Location on Map",
+                        modifier = Modifier.clickable { onNavigateToLocationPicker() } // Open map on icon click
+                    )
                 }
             )
-
-            // Autocomplete dropdown
-            if (locationUiState.autocompleteResults.isNotEmpty()) {
-                Card(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-                ) {
-                    Column {
-                        locationUiState.autocompleteResults.take(5).forEach { result ->
-                            ListItem(
-                                headlineContent = { Text(result.primaryText) },
-                                supportingContent = { Text(result.secondaryText) },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        locationViewModel.onResultClick(result.placeId)
-                                    }
-                            )
-                            if (result != locationUiState.autocompleteResults.last()) {
-                                HorizontalDivider()
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Update both ViewModels when location is selected from autocomplete or map
-            LaunchedEffect(locationUiState.selectedPlaceName) {
-                locationUiState.selectedPlaceName?.let { placeName ->
-                    viewModel.onWhereChange(placeName)
-                }
-            }
-
-            // Sync initial location from map to locationViewModel's searchQuery
-            LaunchedEffect(initialLocation) {
-                initialLocation?.let { location ->
-                    locationViewModel.onSearchQueryChange(location)
-                    viewModel.onWhereChange(location)
-                }
-            }
 
             DatePickerField(uiState.time, onDateSelected = viewModel::onTimeChange) { showDatePicker = true }
             DurationDropdown(uiState.duration, viewModel::onDurationChange)
@@ -143,9 +87,9 @@ fun CreateTripScreen(
             }
 
             // --- Generated Report and Start Button ---
-            uiState.generatedReport?.let { report ->
-                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-                Text(text = report, style = MaterialTheme.typography.bodyMedium)
+            uiState.generatedReport?.let {
+                Divider(modifier = Modifier.padding(vertical = 16.dp))
+                Text(text = it, style = MaterialTheme.typography.bodyMedium)
                 Spacer(modifier = Modifier.height(24.dp))
                 Button(
                     onClick = onStartTrip,
@@ -216,7 +160,7 @@ private fun DurationDropdown(selectedDuration: String, onDurationChange: (String
     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
         OutlinedTextField(
             value = selectedDuration,
-            onValueChange = {},
+            onValueChange = {}, // read-only
             label = { Text("How long?") },
             readOnly = true,
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
@@ -242,7 +186,7 @@ private fun TripTypeDropdown(selectedType: String, onTypeChange: (String) -> Uni
     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
         OutlinedTextField(
             value = selectedType,
-            onValueChange = {},
+            onValueChange = {}, // read-only
             label = { Text("Trip Type") },
             readOnly = true,
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },

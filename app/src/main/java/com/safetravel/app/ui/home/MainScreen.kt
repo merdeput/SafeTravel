@@ -25,23 +25,24 @@ sealed class Screen(val route: String, val title: String) {
 }
 
 @Composable
-fun MainScreen() {
-    val navController = rememberNavController()
-    val navBackStackEntry by navController.currentBackStackEntryAsState()
+fun MainScreen(navController: NavHostController) { // Pass NavController from parent
+    val bottomNavController = rememberNavController()
+    val navBackStackEntry by bottomNavController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
     Scaffold(
         bottomBar = {
-            AppBottomNavigation(navController = navController, currentRoute = currentRoute)
+            AppBottomNavigation(navController = bottomNavController, currentRoute = currentRoute)
         }
     ) { paddingValues ->
         NavHost(
-            navController = navController,
+            navController = bottomNavController,
             startDestination = Screen.InTrip.route, // Start at the InTrip screen
             modifier = Modifier.padding(paddingValues)
         ) {
             composable(Screen.InTrip.route) {
-                InTripScreen()
+                // Pass the main NavController to InTripScreen
+                InTripScreen(navController = navController)
             }
             composable(Screen.AccidentDetection.route) {
                 AccidentDetectionScreen()
