@@ -4,7 +4,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     id("kotlin-kapt")
     id("com.google.android.libraries.mapsplatform.secrets-gradle-plugin") version "2.0.1"
-    id("com.google.dagger.hilt.android") version "2.51"
+    id("com.google.dagger.hilt.android") version "2.57.2"
 }
 
 android {
@@ -52,6 +52,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    implementation("com.google.android.material:material:1.12.0")
 
     // Google Maps & Places
     implementation("com.google.maps.android:maps-compose:4.3.3")
@@ -69,9 +70,13 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.7.5")
     
     // Hilt
-    implementation("com.google.dagger:hilt-android:2.51")
-    kapt("com.google.dagger:hilt-android-compiler:2.51")
+    implementation("com.google.dagger:hilt-android:2.57.2")
+    kapt("com.google.dagger:hilt-android-compiler:2.57.2")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
+
+    // Splash Screen API
+    implementation("androidx.core:core-splashscreen:1.0.1")
+    implementation("com.google.android.material:material:1.10.0")
 
 
     testImplementation(libs.junit)

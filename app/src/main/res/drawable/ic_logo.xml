@@ -1,0 +1,41 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="100dp"
+    android:height="100dp"
+    android:viewportWidth="100"
+    android:viewportHeight="100">
+
+    <!-- Hexagon -->
+    <path
+        android:pathData="M50,15 L75,30 V60 L50,75 L25,60 V30 L50,15Z"
+        android:fillColor="#FFC107" />
+    <path
+        android:pathData="M50,15 L75,30 V60 L50,75 L25,60 V30 L50,15Z"
+        android:strokeColor="#000000"
+        android:strokeWidth="3"
+        android:fillColor="#00000000" /> <!-- Use transparent fill for strokes -->
+
+    <!-- Stripes -->
+    <path
+        android:pathData="M25,38 L75,38"
+        android:strokeColor="#000000"
+        android:strokeWidth="3" />
+    <path
+        android:pathData="M25,52 L75,52"
+        android:strokeColor="#000000"
+        android:strokeWidth="3" />
+
+    <!-- Left wing -->
+    <path
+        android:pathData="M12,40
+                      a8,8 0 1,0 16,0
+                      a8,8 0 1,0 -16,0"
+        android:fillColor="#000" />
+
+    <!-- Right wing -->
+    <path
+        android:pathData="M72,40
+                      a8,8 0 1,0 16,0
+                      a8,8 0 1,0 -16,0"
+        android:fillColor="#000" />
+
+</vector>
