@@ -14,7 +14,7 @@ import javax.inject.Inject
 data class CreateTripUiState(
     val where: String = "",
     val time: String = "",
-    val duration: String = "",
+    val duration: String = "1-2 days", // Default value for the dropdown
     val hasElderly: Boolean = false,
     val hasChildren: Boolean = false,
     val tripType: String = "Sightseeing",
@@ -47,7 +47,7 @@ class CreateTripViewModel @Inject constructor() : ViewModel() {
 ### Safety Report for your ${currentState.tripType} trip to ${currentState.where}
 
 **Trip Details:**
-- **Time:** ${currentState.time}
+- **Date:** ${if (currentState.time.isNotBlank()) currentState.time else "Not specified"}
 - **Duration:** ${currentState.duration}
 - **Group:** ${if(currentState.hasElderly || currentState.hasChildren) "Includes vulnerable members (elderly/children)" else "Adults only"}
 

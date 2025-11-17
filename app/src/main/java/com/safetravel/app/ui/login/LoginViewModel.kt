@@ -37,7 +37,7 @@ class LoginViewModel @Inject constructor() : ViewModel() {
         _uiState.value = _uiState.value.copy(isLoading = true, loginError = null)
         viewModelScope.launch {
             delay(1500) // Simulate network call
-            if (_uiState.value.email == "test@example.com" && _uiState.value.password == "password") {
+            if (_uiState.value.email == "hehe" && _uiState.value.password == "hehe") {
                 _uiState.value = _uiState.value.copy(isLoading = false, loginSuccess = true)
             } else {
                 _uiState.value = _uiState.value.copy(isLoading = false, loginError = "Invalid email or password.")

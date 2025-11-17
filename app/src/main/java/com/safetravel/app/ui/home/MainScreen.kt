@@ -2,7 +2,6 @@ package com.safetravel.app.ui.home
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
@@ -14,14 +13,13 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.safetravel.app.ui.createtrip.CreateTripScreen
 import com.safetravel.app.ui.debug.SensorsScreen
 import com.safetravel.app.ui.sos.AccidentDetectionScreen
 import com.safetravel.app.ui.trip_live.InTripScreen
 
+// Screen routes for the main dashboard
 sealed class Screen(val route: String, val title: String) {
     object InTrip : Screen("in_trip", "In Trip")
-    object CreateTrip : Screen("create_trip", "Create Trip")
     object Sensors : Screen("sensors", "Sensors")
     object AccidentDetection : Screen("accident", "Accident Detection")
 }
@@ -45,9 +43,6 @@ fun MainScreen() {
             composable(Screen.InTrip.route) {
                 InTripScreen()
             }
-            composable(Screen.CreateTrip.route) {
-                CreateTripScreen()
-            }
             composable(Screen.AccidentDetection.route) {
                 AccidentDetectionScreen()
             }
@@ -66,12 +61,6 @@ private fun AppBottomNavigation(navController: NavHostController, currentRoute: 
             label = { Text("In Trip") },
             selected = currentRoute == Screen.InTrip.route,
             onClick = { navigateToScreen(navController, Screen.InTrip.route) }
-        )
-        NavigationBarItem(
-            icon = { Icon(Icons.Default.Add, contentDescription = "Plan Trip") },
-            label = { Text("Plan") },
-            selected = currentRoute == Screen.CreateTrip.route,
-            onClick = { navigateToScreen(navController, Screen.CreateTrip.route) }
         )
         NavigationBarItem(
             icon = { Icon(Icons.Default.Warning, contentDescription = "Accident Detection") },
