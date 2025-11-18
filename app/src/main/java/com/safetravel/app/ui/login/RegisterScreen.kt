@@ -35,11 +35,13 @@ fun RegisterScreen(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Logo Placeholder
+
         Image(
-            painter = painterResource(id = R.drawable.ic_logo),
+            painter = painterResource(id = R.drawable.logo),
             contentDescription = "App Logo",
-            modifier = Modifier.size(100.dp) // You can set the size you need here
+            modifier = Modifier
+                .fillMaxWidth(0.7f) // Adjust width to be 50% of the screen
+                .padding(bottom = 10.dp)
         )
 
         Text(

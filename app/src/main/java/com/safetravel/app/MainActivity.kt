@@ -21,6 +21,7 @@ import com.safetravel.app.ui.profile.ContactsScreen
 import com.safetravel.app.ui.profile.ProfileScreen
 import com.safetravel.app.ui.profile.SettingsScreen
 import com.safetravel.app.ui.sos.AiHelpScreen
+import com.safetravel.app.ui.theme.BeeTheme
 import com.safetravel.app.ui.theme.TestTheme
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -31,7 +32,7 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
         enableEdgeToEdge()
         setContent {
-            TestTheme {
+            BeeTheme {
                 AppNavigation()
             }
         }

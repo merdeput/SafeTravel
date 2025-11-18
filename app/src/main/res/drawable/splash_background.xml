@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+This layer-list is used as the window background for the splash screen.
+It displays a solid white background and then draws the `slogan` drawable
+in the center of the screen, preserving its original size and aspect ratio.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item android:drawable="@android:color/white" />
+
+    <item>
+        <bitmap
+            android:gravity="center"
+            android:src="@drawable/slogan" />
+    </item>
+
+</layer-list>
