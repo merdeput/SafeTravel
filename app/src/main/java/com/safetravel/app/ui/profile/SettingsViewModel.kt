@@ -2,6 +2,7 @@ package com.safetravel.app.ui.profile
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.safetravel.app.data.repository.AuthRepository
 import com.safetravel.app.data.repository.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,7 +19,8 @@ data class SettingsUiState(
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val authRepository: AuthRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -46,5 +48,11 @@ class SettingsViewModel @Inject constructor(
     fun onPasscodeChange(newPasscode: String) {
         _uiState.update { it.copy(passcode = newPasscode) }
         viewModelScope.launch { settingsRepository.savePasscode(newPasscode) }
+    }
+
+    fun logout() {
+        viewModelScope.launch {
+            authRepository.logout()
+        }
     }
 }

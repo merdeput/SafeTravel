@@ -48,9 +48,9 @@ fun LoginScreen(
         )
 
         OutlinedTextField(
-            value = uiState.email,
-            onValueChange = viewModel::onEmailChange,
-            label = { Text("Email") },
+            value = uiState.username,
+            onValueChange = viewModel::onUsernameChange,
+            label = { Text("Username") },
             modifier = Modifier.fillMaxWidth()
         )
         Spacer(modifier = Modifier.height(8.dp))
@@ -78,7 +78,7 @@ fun LoginScreen(
             Button(
                 onClick = viewModel::onLoginClick,
                 modifier = Modifier.fillMaxWidth(),
-                enabled = uiState.email.isNotBlank() && uiState.password.isNotBlank()
+                enabled = uiState.username.isNotBlank() && uiState.password.isNotBlank()
             ) {
                 Text("Login")
             }

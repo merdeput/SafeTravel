@@ -67,7 +67,12 @@ fun AppNavigation() {
         }
 
         composable("settings") {
-            SettingsScreen(onNavigateUp = { navController.popBackStack() })
+            SettingsScreen(
+                onNavigateUp = { navController.popBackStack() },
+                onLogout = {
+                    navController.navigate("login") { popUpTo(0) { inclusive = true } }
+                }
+            )
         }
 
         composable("contacts") {
