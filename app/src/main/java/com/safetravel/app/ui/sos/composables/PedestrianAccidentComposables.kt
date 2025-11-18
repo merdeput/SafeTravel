@@ -1,0 +1,342 @@
+package com.safetravel.app.ui.sos.composables
+
+import android.annotation.SuppressLint
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Divider
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import com.safetravel.app.ui.sos.data.DetectionState
+import com.safetravel.app.ui.sos.data.DetectionStateEnum
+import java.text.SimpleDateFormat
+import java.util.Locale
+import kotlin.math.max
+
+@Composable
+fun AlertStatusCard(
+    accidentDetected: Boolean,
+    detectionTime: Long,
+    onReset: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (accidentDetected)
+                MaterialTheme.colorScheme.errorContainer
+            else
+                MaterialTheme.colorScheme.primaryContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = if (accidentDetected) "⚠️ ACCIDENT DETECTED" else "✓ MONITORING ACTIVE",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = if (accidentDetected)
+                    MaterialTheme.colorScheme.error
+                else
+                    MaterialTheme.colorScheme.primary
+            )
+
+            if (accidentDetected) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Time: ${SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(detectionTime)}",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(
+                    onClick = onReset,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("RESET ALERT")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DetectionStateCard(state: DetectionStateEnum) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = when (state) {
+                DetectionStateEnum.IDLE -> MaterialTheme.colorScheme.surfaceVariant
+                DetectionStateEnum.MONITORING -> MaterialTheme.colorScheme.primaryContainer
+                DetectionStateEnum.POTENTIAL_IMPACT -> MaterialTheme.colorScheme.tertiaryContainer
+                DetectionStateEnum.VALIDATING -> MaterialTheme.colorScheme.secondaryContainer
+                DetectionStateEnum.CONFIRMED_ACCIDENT -> MaterialTheme.colorScheme.errorContainer
+            }
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "Detection State",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = state.name.replace("_", " "),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@SuppressLint("DefaultLocale")
+@Composable
+fun CalculationsCard(state: DetectionState) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "Real-time Calculations",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Raw Accelerometer
+            SectionHeader("Raw Accelerometer")
+            MetricRow("X-axis", String.format("%.3f m/s²", state.accelX))
+            MetricRow("Y-axis", String.format("%.3f m/s²", state.accelY))
+            MetricRow("Z-axis", String.format("%.3f m/s²", state.accelZ))
+
+            Divider(Modifier.padding(vertical = 12.dp))
+
+            // TAM (Total Acceleration Magnitude)
+            SectionHeader("Total Acceleration Magnitude (TAM)")
+            MetricRow("Formula", "√(ax² + ay² + az²)")
+            MetricRow("Value", String.format("%.3f m/s²", state.tam), highlight = state.tam > 20f)
+
+            Divider(Modifier.padding(vertical = 12.dp))
+
+            // Jerk
+            SectionHeader("Jerk (Rate of Change)")
+            MetricRow("Formula", "√(jx² + jy² + jz²)")
+            MetricRow("Value", String.format("%.2f m/s³", state.jerk), highlight = state.jerk > 100f)
+
+            Divider(Modifier.padding(vertical = 12.dp))
+
+            // Angular Velocity
+            SectionHeader("Angular Velocity")
+            MetricRow("ωx", String.format("%.3f rad/s", state.gyroX))
+            MetricRow("ωy", String.format("%.3f rad/s", state.gyroY))
+            MetricRow("ωz", String.format("%.3f rad/s", state.gyroZ))
+            MetricRow("Magnitude", String.format("%.3f rad/s", state.angularMagnitude), highlight = state.angularMagnitude > 4f)
+
+            Divider(Modifier.padding(vertical = 12.dp))
+
+            // Gravity & Orientation
+            SectionHeader("Gravity Vector & Orientation")
+            MetricRow("Gravity X", String.format("%.3f m/s²", state.gravityX))
+            MetricRow("Gravity Y", String.format("%.3f m/s²", state.gravityY))
+            MetricRow("Gravity Z", String.format("%.3f m/s²", state.gravityZ))
+            MetricRow("Orientation Change", String.format("%.1f°", state.orientationChange), highlight = state.orientationChange > 60f)
+
+            Divider(Modifier.padding(vertical = 12.dp))
+
+            // SMA (Signal Magnitude Area)
+            SectionHeader("Signal Magnitude Area (1s window)")
+            MetricRow("SMA", String.format("%.3f m/s²", state.sma))
+        }
+    }
+}
+
+@Composable
+fun ThresholdStatusCard(state: DetectionState) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "Threshold Status",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            ThresholdRow("TAM > 20 m/s²", state.tam > 20f)
+            ThresholdRow("Jerk > 100 m/s³", state.jerk > 100f)
+            ThresholdRow("Angular > 4 rad/s", state.angularMagnitude > 4f)
+            ThresholdRow("Orientation > 60°", state.orientationChange > 60f)
+            ThresholdRow("Duration > 150ms", state.impactDuration > 150)
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            val conditionsMet = listOf(
+                state.tam > 20f,
+                state.jerk > 100f,
+                state.angularMagnitude > 4f || state.orientationChange > 60f,
+                state.impactDuration > 150
+            ).count { it }
+
+            Text(
+                text = "Conditions Met: $conditionsMet / 4",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = if (conditionsMet >= 3) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+            )
+        }
+    }
+}
+
+@Composable
+fun PostImpactCard(state: DetectionState) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "Post-Impact Validation",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            val elapsed = (System.currentTimeMillis() - state.validationStartTime) / 1000f
+            val remaining = max(0f, 30f - elapsed)
+
+            Text(
+                text = "Monitoring for stillness...",
+                style = MaterialTheme.typography.bodyMedium
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            LinearProgressIndicator(
+                progress = { (elapsed / 30f).coerceIn(0f, 1f) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = String.format("Time remaining: %.1fs", remaining),
+                style = MaterialTheme.typography.bodySmall
+            )
+
+            MetricRow("Current SMA", String.format("%.3f m/s²", state.sma))
+            MetricRow("Stillness Required", "< 1.0 m/s²")
+            MetricRow("User Stationary", if (state.sma < 1.0f) "YES ✓" else "NO ✗")
+        }
+    }
+}
+
+@Composable
+fun SectionHeader(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.primary
+    )
+    Spacer(modifier = Modifier.height(4.dp))
+}
+
+@Composable
+fun MetricRow(label: String, value: String, highlight: Boolean = false) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = if (highlight) FontWeight.Bold else FontWeight.Normal,
+            color = if (highlight) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
+@Composable
+fun ThresholdRow(condition: String, met: Boolean) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = condition,
+            style = MaterialTheme.typography.bodyMedium
+        )
+        Box(
+            modifier = Modifier
+                .size(24.dp)
+                .background(
+                    color = if (met) Color(0xFF4CAF50) else Color(0xFFBDBDBD),
+                    shape = MaterialTheme.shapes.small
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = if (met) "✓" else "✗",
+                color = Color.White,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@SuppressLint("DefaultLocale")
+@Composable
+fun DebugDequeCard(deque: ArrayDeque<DetectionState>) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "Debug Deque",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Text("Deque size: ${deque.size}")
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            deque.takeLast(5).forEachIndexed { index, state ->
+                Text("  [${index}] TAM: ${String.format("%.3f", state.tam)}")
+            }
+        }
+    }
+}

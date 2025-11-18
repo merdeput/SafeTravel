@@ -1,0 +1,30 @@
+package com.safetravel.app.ui.sos.data
+
+data class DetectionState(
+    val accelX: Float = 0f,
+    val accelY: Float = 0f,
+    val accelZ: Float = 0f,
+    val tam: Float = 0f,
+    val jerk: Float = 0f,
+    val gyroX: Float = 0f,
+    val gyroY: Float = 0f,
+    val gyroZ: Float = 0f,
+    val angularMagnitude: Float = 0f,
+    val gravityX: Float = 0f,
+    val gravityY: Float = 0f,
+    val gravityZ: Float = 0f,
+    val orientationChange: Float = 0f,
+    val sma: Float = 0f,
+    val impactDuration: Long = 0L,
+    val currentState: DetectionStateEnum = DetectionStateEnum.IDLE,
+    val accidentConfirmed: Boolean = false,
+    val validationStartTime: Long = 0L
+)
+
+enum class DetectionStateEnum {
+    IDLE,
+    MONITORING,
+    POTENTIAL_IMPACT,
+    VALIDATING,
+    CONFIRMED_ACCIDENT
+}
