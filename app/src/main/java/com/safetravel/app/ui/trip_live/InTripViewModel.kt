@@ -5,29 +5,21 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
+import com.safetravel.app.data.api.ApiService
 import com.safetravel.app.data.model.Coordinates
 import com.safetravel.app.data.model.LocationData
-import com.safetravel.app.data.api.ApiService
 import com.safetravel.app.data.repository.GeocodingService
 import com.safetravel.app.data.repository.LocationService
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
-// Represents a marker on the map
-data class MapMarker(
-    val position: LatLng,
-    val title: String
-)
+data class MapMarker(val position: LatLng, val title: String)
 
-// Represents the entire UI state for the map screen
 data class InTripUiState(
     val currentLocation: LatLng? = null,
     val locationAccuracy: Float? = null,
@@ -44,32 +36,22 @@ class InTripViewModel @Inject constructor(
     private val apiService: ApiService
 ) : ViewModel() {
 
-    // Private mutable state
     private val _uiState = MutableStateFlow(InTripUiState())
-    // Public read-only state for the UI to observe
     val uiState: StateFlow<InTripUiState> = _uiState.asStateFlow()
 
     fun startLocationUpdates() {
         Log.d("InTripViewModel", "Starting location updates")
         viewModelScope.launch {
             locationService.getLocationUpdates(10000)
-                .catch { e ->
-                    addLogMessage("✗ Location Error: ${e.message}")
-                }
+                .catch { e -> addLogMessage("✗ Location Error: ${e.message}") }
                 .collect { location ->
                     val latLng = LatLng(location.latitude, location.longitude)
-                    _uiState.value = _uiState.value.copy(
-                        currentLocation = latLng,
-                        locationAccuracy = location.accuracy
-                    )
-
-                    // Only move camera if it's still at the default position
-                    if (_uiState.value.cameraPosition.target.latitude == 10.762622) {
-                        _uiState.value = _uiState.value.copy(
-                            cameraPosition = CameraPosition.fromLatLngZoom(latLng, 15f)
+                    _uiState.update {
+                        it.copy(
+                            currentLocation = latLng,
+                            locationAccuracy = location.accuracy
                         )
                     }
-
                     sendLocationToServer(
                         locationData = LocationData(
                             type = "current_location",
@@ -86,16 +68,15 @@ class InTripViewModel @Inject constructor(
     fun onMapClick(latLng: LatLng) {
         if (_uiState.value.isProcessingTap) return
 
-        _uiState.value = _uiState.value.copy(isProcessingTap = true)
+        _uiState.update { it.copy(isProcessingTap = true) }
         addLogMessage("... Getting location info")
 
         viewModelScope.launch {
             try {
                 val placeName = geocodingService.getAddressFromLatLng(latLng)
-                _uiState.value = _uiState.value.copy(
-                    markers = _uiState.value.markers + MapMarker(latLng, placeName)
-                )
-
+                _uiState.update { state ->
+                    state.copy(markers = state.markers + MapMarker(latLng, placeName))
+                }
                 sendLocationToServer(
                     locationData = LocationData(
                         type = "tap_location",
@@ -108,17 +89,18 @@ class InTripViewModel @Inject constructor(
             } catch (e: Exception) {
                 addLogMessage("✗ Tap error: ${e.message}")
             } finally {
-                _uiState.value = _uiState.value.copy(isProcessingTap = false)
+                _uiState.update { it.copy(isProcessingTap = false) }
             }
         }
     }
 
     fun onPlaceSelected(latLng: LatLng, placeName: String) {
-        _uiState.value = _uiState.value.copy(
-            markers = _uiState.value.markers + MapMarker(latLng, placeName),
-            cameraPosition = CameraPosition.fromLatLngZoom(latLng, 15f)
-        )
-
+        _uiState.update { state ->
+            state.copy(
+                markers = state.markers + MapMarker(latLng, placeName),
+                cameraPosition = CameraPosition.fromLatLngZoom(latLng, 15f)
+            )
+        }
         sendLocationToServer(
             locationData = LocationData(
                 type = "search_location",
@@ -146,14 +128,12 @@ class InTripViewModel @Inject constructor(
     }
 
     private fun addLogMessage(message: String) {
-        _uiState.value = _uiState.value.copy(
-            logMessages = (_uiState.value.logMessages + message).takeLast(5)
-        )
+        _uiState.update { state ->
+            state.copy(logMessages = (state.logMessages + message).takeLast(5))
+        }
     }
 
     private fun getCurrentTimestamp(): String {
-        return Instant.now()
-            .atOffset(ZoneOffset.UTC)
-            .format(DateTimeFormatter.ISO_INSTANT)
+        return Instant.now().atOffset(ZoneOffset.UTC).format(DateTimeFormatter.ISO_INSTANT)
     }
 }
