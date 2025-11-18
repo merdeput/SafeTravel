@@ -75,10 +75,15 @@ dependencies {
 
     // Splash Screen API
     implementation("androidx.core:core-splashscreen:1.0.1")
-    implementation("androidx.compose.material:material-icons-extended-android:1.6.7") // Or the version matching your other Compose libraries
 
     // Kotlin Coroutines for Google Play Services
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.0")
+    
+    // Jetpack DataStore
+    implementation("androidx.datastore:datastore-preferences:1.1.1")
+
+    // Material
+    implementation("androidx.compose.material:material-icons-extended-android:1.6.7")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

@@ -7,18 +7,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import javax.inject.Inject
 
-// This ViewModel is now only responsible for the Profile Screen's data
-
-data class Trip(
-    val id: String,
-    val destination: String,
-    val date: String
-)
-
-data class ProfileUiState(
-    val userName: String = "Jane Doe",
-    val trips: List<Trip> = emptyList()
-)
+// The data classes (Trip, ProfileUiState) are now correctly defined in ProfileData.kt
 
 @HiltViewModel
 class ProfileViewModel @Inject constructor() : ViewModel() {

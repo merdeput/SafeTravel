@@ -19,6 +19,7 @@ import com.safetravel.app.ui.login.LoginScreen
 import com.safetravel.app.ui.login.RegisterScreen
 import com.safetravel.app.ui.profile.ContactsScreen
 import com.safetravel.app.ui.profile.ProfileScreen
+import com.safetravel.app.ui.profile.SettingsScreen
 import com.safetravel.app.ui.sos.AiHelpScreen
 import com.safetravel.app.ui.theme.TestTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -60,14 +61,17 @@ fun AppNavigation() {
         composable("profile") {
             ProfileScreen(
                 onCreateTrip = { navController.navigate("create_trip") },
-                onManageContacts = { navController.navigate("contacts") } // Navigate to the new screen
+                onManageContacts = { navController.navigate("contacts") },
+                onNavigateToSettings = { navController.navigate("settings") } // Add navigation to settings
             )
         }
 
+        composable("settings") {
+            SettingsScreen(onNavigateUp = { navController.popBackStack() })
+        }
+
         composable("contacts") {
-            ContactsScreen(
-                onNavigateUp = { navController.popBackStack() }
-            )
+            ContactsScreen(onNavigateUp = { navController.popBackStack() })
         }
 
         composable("create_trip") {
@@ -101,9 +105,7 @@ fun AppNavigation() {
 
         composable("ai_help") {
             AiHelpScreen(
-                onEmergencyStopped = { 
-                    navController.popBackStack("main", inclusive = false)
-                }
+                onEmergencyStopped = { navController.popBackStack("main", inclusive = false) }
             )
         }
 

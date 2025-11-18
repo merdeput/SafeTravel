@@ -21,7 +21,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 fun ProfileScreen(
     viewModel: ProfileViewModel = hiltViewModel(),
     onCreateTrip: () -> Unit,
-    onManageContacts: () -> Unit // Clean navigation callback
+    onManageContacts: () -> Unit,
+    onNavigateToSettings: () -> Unit // This was missing
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -33,7 +34,8 @@ fun ProfileScreen(
                     IconButton(onClick = onManageContacts) {
                         Icon(Icons.Default.Contacts, contentDescription = "Manage Contacts")
                     }
-                    IconButton(onClick = { /* TODO: Settings screen */ }) {
+                    // Use the new navigation callback
+                    IconButton(onClick = onNavigateToSettings) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings")
                     }
                 }

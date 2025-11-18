@@ -18,7 +18,6 @@ fun AiHelpScreen(
     val uiState by viewModel.uiState.collectAsState()
     var showStopDialog by remember { mutableStateOf(false) }
 
-    // Navigate back when emergency is stopped
     LaunchedEffect(uiState.emergencyStopped) {
         if (uiState.emergencyStopped) {
             onEmergencyStopped()
@@ -26,37 +25,49 @@ fun AiHelpScreen(
     }
 
     Scaffold(
-        topBar = { CenterAlignedTopAppBar(title = { Text("AI Emergency Assistant") }) },
-        bottomBar = {
-            Column {
+        topBar = { TopAppBar(title = { Text("AI Emergency Assistant") }) },
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .padding(paddingValues)
+                .fillMaxSize()
+        ) {
+            // Chat messages take up the remaining space
+            LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 16.dp),
+                reverseLayout = true
+            ) {
+                items(uiState.messages.reversed()) { chatMessage ->
+                    Text(chatMessage.message, modifier = Modifier.padding(vertical = 8.dp))
+                }
+            }
+
+            // Controls are now at the bottom, but within the safe area
+            Column(modifier = Modifier.padding(16.dp)) {
                 Button(
                     onClick = { showStopDialog = true },
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
                 ) {
                     Text("Stop Emergency")
                 }
-                // Chat Input
+                Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = uiState.currentQuery,
                     onValueChange = viewModel::onQueryChange,
                     label = { Text("Ask for help...") },
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 16.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     trailingIcon = {
-                        Button(onClick = viewModel::onAskClick, enabled = !uiState.isAwaitingResponse) {
-                            Text("Ask")
+                        // Add padding to the button to prevent it from touching the edge
+                        Box(modifier = Modifier.padding(end = 8.dp)) {
+                            Button(onClick = viewModel::onAskClick, enabled = !uiState.isAwaitingResponse) {
+                                Text("Ask")
+                            }
                         }
                     }
                 )
-            }
-        }
-    ) {
-        LazyColumn(
-            modifier = Modifier.padding(it).padding(16.dp),
-            reverseLayout = true
-        ) {
-            items(uiState.messages.reversed()) { chatMessage ->
-                Text(chatMessage.message)
             }
         }
     }
@@ -106,4 +117,3 @@ private fun StopEmergencyDialog(
         }
     )
 }
-
