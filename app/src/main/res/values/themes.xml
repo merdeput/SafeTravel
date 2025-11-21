@@ -2,4 +2,17 @@
 <resources>
 
     <style name="Theme.Test" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <!-- This is the theme for the splash screen -->
+    <style name="Theme.App.Starting" parent="Theme.SplashScreen">
+        <!-- Use our custom drawable as the window background -->
+        <item name="windowSplashScreenBackground">@drawable/splash_background</item>
+
+        <!-- We don't need a separate icon, as it's part of the background -->
+        <item name="windowSplashScreenAnimatedIcon">@null</item>
+
+        <!-- Set the theme that will be used after the splash screen is dismissed -->
+        <item name="postSplashScreenTheme">@style/Theme.Test</item>
+    </style>
+
 </resources>
