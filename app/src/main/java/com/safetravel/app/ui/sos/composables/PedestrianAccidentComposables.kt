@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -18,13 +19,22 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Divider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.safetravel.app.ui.sos.data.DetectionState
 import com.safetravel.app.ui.sos.data.DetectionStateEnum
 import java.text.SimpleDateFormat
@@ -96,7 +106,7 @@ fun DetectionStateCard(state: DetectionStateEnum) {
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = "Detection State",
+                text = "System 1 (Standard)",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
@@ -339,4 +349,111 @@ fun DebugDequeCard(deque: ArrayDeque<DetectionState>) {
             }
         }
     }
+}
+
+@Composable
+fun PaperDetectorStatusCard(stateName: String) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = when (stateName) {
+                "IDLE" -> MaterialTheme.colorScheme.surfaceVariant
+                "FREE_FALL_DETECTED" -> MaterialTheme.colorScheme.tertiaryContainer
+                "IMPACT_DETECTED" -> MaterialTheme.colorScheme.secondaryContainer
+                "CONFIRMED" -> MaterialTheme.colorScheme.errorContainer
+                else -> MaterialTheme.colorScheme.surfaceVariant
+            }
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "System 2 (Paper Algorithm)",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = stateName.replace("_", " "),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@Composable
+fun AccidentCountdownDialog(
+    secondsRemaining: Int,
+    onImOkayClick: () -> Unit,
+    onSendHelpClick: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = {},
+        title = { Text("Are you okay?", textAlign = TextAlign.Center) },
+        text = {
+            Text(
+                text = "Accident detected. Sending alert in $secondsRemaining seconds",
+                fontSize = 18.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = onSendHelpClick,
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("SEND HELP NOW")
+            }
+        },
+        dismissButton = {
+            OutlinedButton(
+                onClick = onImOkayClick,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("I'm Okay")
+            }
+        }
+    )
+}
+
+@Composable
+fun AccidentPasscodeDialog(
+    secondsRemaining: Int,
+    error: String?,
+    onVerify: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var passcode by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Enter Passcode to Cancel") },
+        text = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "Sending alert in $secondsRemaining seconds",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+                OutlinedTextField(
+                    value = passcode,
+                    onValueChange = { passcode = it },
+                    label = { Text("Passcode") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    isError = error != null
+                )
+                error?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onVerify(passcode) }) {
+                Text("Confirm")
+            }
+        }
+    )
 }
