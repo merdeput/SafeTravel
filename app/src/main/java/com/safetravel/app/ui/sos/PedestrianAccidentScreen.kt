@@ -23,6 +23,7 @@ import com.safetravel.app.ui.sos.composables.DetectionStateCard
 import com.safetravel.app.ui.sos.composables.PaperDetectorStatusCard
 import com.safetravel.app.ui.sos.composables.PostImpactCard
 import com.safetravel.app.ui.sos.composables.ThresholdStatusCard
+import com.safetravel.app.ui.sos.composables.VolumeSosStatusCard
 import com.safetravel.app.ui.sos.data.DetectionStateEnum
 
 @Composable
@@ -66,6 +67,11 @@ fun AccidentDetectionScreen(
 
         // System 2 Status
         PaperDetectorStatusCard(paperStateName)
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Volume SOS Status (New)
+        VolumeSosStatusCard()
 
         Spacer(modifier = Modifier.height(16.dp))
 

@@ -382,6 +382,36 @@ fun PaperDetectorStatusCard(stateName: String) {
 }
 
 @Composable
+fun VolumeSosStatusCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "Volume Button SOS",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Press volume buttons 10 times rapidly to trigger SOS.",
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Status: Active",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@Composable
 fun AccidentCountdownDialog(
     secondsRemaining: Int,
     onImOkayClick: () -> Unit,
@@ -445,14 +475,26 @@ fun AccidentPasscodeDialog(
                     visualTransformation = PasswordVisualTransformation(),
                     isError = error != null
                 )
-                error?.let {
-                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                if (error != null) {
+                    Text(
+                        text = error,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
                 }
             }
         },
         confirmButton = {
-            Button(onClick = { onVerify(passcode) }) {
-                Text("Confirm")
+            Button(
+                onClick = { onVerify(passcode) }
+            ) {
+                Text("Verify")
+            }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) {
+                Text("Cancel")
             }
         }
     )

@@ -11,6 +11,7 @@ import com.safetravel.app.data.repository.SensorDataRepository
 import com.safetravel.app.ui.sos.data.DetectionState
 import com.safetravel.app.ui.sos.detector.AccidentDetector
 import com.safetravel.app.ui.sos.detector.PaperFallDetector
+import com.safetravel.app.ui.sos.detector.VolumeSOSDetector
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -60,6 +61,7 @@ class PedestrianAccidentScreenViewModel @Inject constructor(
     // Detectors
     private var accidentDetector = AccidentDetector() // Changed to var to allow reset by recreation
     private val paperFallDetector = PaperFallDetector()
+    private var volumeSOSDetector: VolumeSOSDetector? = null
 
     private lateinit var sensorManager: SensorManager
     
@@ -83,6 +85,17 @@ class PedestrianAccidentScreenViewModel @Inject constructor(
         magnetometer = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
 
         registerListeners()
+
+        // Init Volume SOS
+        volumeSOSDetector = VolumeSOSDetector(context) {
+            // Triggered on volume button rapid press
+            viewModelScope.launch {
+                if (!_accidentDetected.value && !_isCountdownActive.value) {
+                    startCountdown()
+                }
+            }
+        }
+        volumeSOSDetector?.start()
     }
 
     // Listener for System 1 (Linear Accel)
@@ -233,6 +246,7 @@ class PedestrianAccidentScreenViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         unregisterListeners()
+        volumeSOSDetector?.stop()
         countdownJob?.cancel()
     }
 }
