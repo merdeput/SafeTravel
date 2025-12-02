@@ -30,9 +30,6 @@ import com.safetravel.app.ui.sos.data.DetectionStateEnum
 fun AccidentDetectionScreen(
     viewModel: PedestrianAccidentScreenViewModel = hiltViewModel()
 ) {
-    val context = LocalContext.current
-    viewModel.init(context)
-
     val detectionState by viewModel.detectionState.collectAsState()
     val paperStateName by viewModel.paperStateName.collectAsState()
     val accidentDetected by viewModel.accidentDetected.collectAsState()

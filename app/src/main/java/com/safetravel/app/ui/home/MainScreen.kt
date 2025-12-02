@@ -1,5 +1,8 @@
 package com.safetravel.app.ui.home
 
+import android.Manifest
+import android.content.Intent
+import android.os.Build
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.LocationOn
@@ -8,11 +11,16 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberMultiplePermissionsState
+import com.safetravel.app.service.BackgroundSafetyService
 import com.safetravel.app.ui.debug.SensorsScreen
 import com.safetravel.app.ui.sos.AccidentDetectionScreen
 import com.safetravel.app.ui.trip_live.InTripScreen
@@ -24,11 +32,49 @@ sealed class Screen(val route: String, val title: String) {
     object AccidentDetection : Screen("accident", "Accident Detection")
 }
 
+@OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun MainScreen(navController: NavHostController) { // Pass NavController from parent
+    val context = LocalContext.current
     val bottomNavController = rememberNavController()
     val navBackStackEntry by bottomNavController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+
+    // Define permissions to request
+    val permissionsToRequest = remember {
+        mutableListOf(
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ).apply {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
+
+    val permissionState = rememberMultiplePermissionsState(permissionsToRequest)
+
+    // Request permissions on launch
+    LaunchedEffect(Unit) {
+        if (!permissionState.allPermissionsGranted) {
+            permissionState.launchMultiplePermissionRequest()
+        }
+    }
+
+    // Start Background Service ONLY when Location permission is granted
+    // (Required for FOREGROUND_SERVICE_LOCATION on Android 14+)
+    val isLocationGranted = permissionState.permissions.any { 
+        (it.permission == Manifest.permission.ACCESS_FINE_LOCATION || 
+         it.permission == Manifest.permission.ACCESS_COARSE_LOCATION) && 
+         it.status.isGranted 
+    }
+
+    LaunchedEffect(isLocationGranted) {
+        if (isLocationGranted) {
+            val serviceIntent = Intent(context, BackgroundSafetyService::class.java)
+            context.startForegroundService(serviceIntent)
+        }
+    }
 
     Scaffold(
         bottomBar = {

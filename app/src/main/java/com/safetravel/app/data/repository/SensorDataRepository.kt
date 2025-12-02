@@ -14,14 +14,26 @@ class SensorDataRepository @Inject constructor() {
     private val _sensorDataDeque = MutableStateFlow<ArrayDeque<DetectionState>>(ArrayDeque())
     val sensorDataDeque = _sensorDataDeque.asStateFlow()
 
-    fun addSensorData(state: DetectionState) {
-        val newDeque = ArrayDeque(_sensorDataDeque.value)
+    private val _latestDetectionState = MutableStateFlow(DetectionState())
+    val latestDetectionState = _latestDetectionState.asStateFlow()
 
+    private val _paperStateName = MutableStateFlow("IDLE")
+    val paperStateName = _paperStateName.asStateFlow()
+
+    fun addSensorData(state: DetectionState) {
+        // Update latest state
+        _latestDetectionState.value = state
+
+        // Update deque
+        val newDeque = ArrayDeque(_sensorDataDeque.value)
         if (newDeque.size >= MAX_DEQUE_SIZE) {
             newDeque.removeFirst()
         }
         newDeque.addLast(state)
-
         _sensorDataDeque.value = newDeque
+    }
+
+    fun updatePaperState(stateName: String) {
+        _paperStateName.value = stateName
     }
 }

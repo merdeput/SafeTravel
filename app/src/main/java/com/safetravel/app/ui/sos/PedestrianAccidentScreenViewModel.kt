@@ -1,38 +1,39 @@
 package com.safetravel.app.ui.sos
 
 import android.content.Context
-import android.hardware.Sensor
-import android.hardware.SensorEvent
-import android.hardware.SensorEventListener
-import android.hardware.SensorManager
+import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.safetravel.app.data.repository.SensorDataRepository
+import com.safetravel.app.service.BackgroundSafetyService
 import com.safetravel.app.ui.sos.data.DetectionState
-import com.safetravel.app.ui.sos.detector.AccidentDetector
-import com.safetravel.app.ui.sos.detector.PaperFallDetector
-import com.safetravel.app.ui.sos.detector.VolumeSOSDetector
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class PedestrianAccidentScreenViewModel @Inject constructor(
-    private val sensorDataRepository: SensorDataRepository
+    @ApplicationContext private val context: Context,
+    private val repository: SensorDataRepository
 ) : ViewModel() {
 
-    // System 1 State
-    private val _detectionState = MutableStateFlow(DetectionState())
-    val detectionState = _detectionState.asStateFlow()
+    // Observe latest state from Repository (driven by Background Service)
+    val detectionState = repository.latestDetectionState
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DetectionState())
 
-    // System 2 State
-    private val _paperStateName = MutableStateFlow("IDLE")
-    val paperStateName = _paperStateName.asStateFlow()
+    val paperStateName = repository.paperStateName
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "IDLE")
+
+    val sensorDataDeque = repository.sensorDataDeque
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ArrayDeque())
 
     // Combined Alert State
     private val _accidentDetected = MutableStateFlow(false)
@@ -56,112 +57,20 @@ class PedestrianAccidentScreenViewModel @Inject constructor(
 
     private var countdownJob: Job? = null
 
-    val sensorDataDeque = sensorDataRepository.sensorDataDeque
-
-    // Detectors
-    private var accidentDetector = AccidentDetector() // Changed to var to allow reset by recreation
-    private val paperFallDetector = PaperFallDetector()
-    private var volumeSOSDetector: VolumeSOSDetector? = null
-
-    private lateinit var sensorManager: SensorManager
-    
-    // Sensors
-    private var linearAcceleration: Sensor? = null
-    private var accelerometer: Sensor? = null // For Paper Detector (needs gravity included)
-    private var gyroscope: Sensor? = null
-    private var gravity: Sensor? = null
-    private var magnetometer: Sensor? = null
-
-    // Cache for Magnetometer processing
-    private var lastAccelerometerValues = FloatArray(3)
-
-    fun init(context: Context) {
-        sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        
-        linearAcceleration = sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)
-        accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
-        gyroscope = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
-        gravity = sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY)
-        magnetometer = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
-
-        registerListeners()
-
-        // Init Volume SOS
-        volumeSOSDetector = VolumeSOSDetector(context) {
-            // Triggered on volume button rapid press
-            viewModelScope.launch {
-                if (!_accidentDetected.value && !_isCountdownActive.value) {
-                    startCountdown()
+    init {
+        // Monitor for accidents from the repository state
+        viewModelScope.launch {
+            detectionState.collect { state ->
+                if (state.accidentConfirmed) {
+                    checkForAccident()
                 }
             }
         }
-        volumeSOSDetector?.start()
     }
 
-    // Listener for System 1 (Linear Accel)
-    private val linearAccelListener = object : SensorEventListener {
-        override fun onSensorChanged(event: SensorEvent?) {
-            event?.let {
-                viewModelScope.launch {
-                    val result = accidentDetector.processAccelerometer(it.values, it.timestamp)
-                    _detectionState.value = result
-                    sensorDataRepository.addSensorData(result)
-
-                    checkForAccident(result.accidentConfirmed, false)
-                }
-            }
-        }
-        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
-    }
-
-    // Listener for System 2 (Raw Accel)
-    private val accelerometerListener = object : SensorEventListener {
-        override fun onSensorChanged(event: SensorEvent?) {
-            event?.let {
-                System.arraycopy(it.values, 0, lastAccelerometerValues, 0, 3)
-                
-                val isPaperFall = paperFallDetector.processAccelerometer(it.values, it.timestamp / 1000000)
-                _paperStateName.value = paperFallDetector.getCurrentStateName()
-                
-                checkForAccident(false, isPaperFall)
-            }
-        }
-        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
-    }
-
-    private val gyroListener = object : SensorEventListener {
-        override fun onSensorChanged(event: SensorEvent?) {
-            event?.let {
-                accidentDetector.processGyroscope(it.values, it.timestamp)
-            }
-        }
-        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
-    }
-
-    private val gravityListener = object : SensorEventListener {
-        override fun onSensorChanged(event: SensorEvent?) {
-            event?.let {
-                accidentDetector.processGravitySensor(it.values)
-            }
-        }
-        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
-    }
-
-    private val magnetometerListener = object : SensorEventListener {
-        override fun onSensorChanged(event: SensorEvent?) {
-            event?.let {
-                paperFallDetector.processMagnetometer(it.values, lastAccelerometerValues)
-            }
-        }
-        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
-    }
-
-    private fun checkForAccident(system1Confirmed: Boolean, system2Confirmed: Boolean) {
-        if ((system1Confirmed || system2Confirmed)) {
-            // Start countdown only if not already active and accident not yet confirmed
-            if (!_accidentDetected.value && !_isCountdownActive.value) {
-                startCountdown()
-            }
+    private fun checkForAccident() {
+        if (!_accidentDetected.value && !_isCountdownActive.value) {
+            startCountdown()
         }
     }
 
@@ -195,13 +104,13 @@ class PedestrianAccidentScreenViewModel @Inject constructor(
     fun onVerifyPasscode(passcode: String) {
         if (passcode == "1234") { // Dummy passcode
             countdownJob?.cancel()
-            _isCountdownActive.value = false
-            _showPasscodeDialog.value = false
-            _accidentDetected.value = false
+            resetAlertState()
             
-            // Reset logic
-            paperFallDetector.reset()
-            accidentDetector = AccidentDetector() // Re-instantiate to reset state
+            // Send reset command to Background Service
+            val intent = Intent(context, BackgroundSafetyService::class.java).apply {
+                action = BackgroundSafetyService.ACTION_RESET_DETECTOR
+            }
+            context.startService(intent)
         } else {
             _passcodeError.value = "Invalid passcode"
         }
@@ -216,37 +125,21 @@ class PedestrianAccidentScreenViewModel @Inject constructor(
         confirmAccident()
     }
 
-    private fun registerListeners() {
-        linearAcceleration?.let { sensorManager.registerListener(linearAccelListener, it, SensorManager.SENSOR_DELAY_FASTEST) }
-        accelerometer?.let { sensorManager.registerListener(accelerometerListener, it, SensorManager.SENSOR_DELAY_FASTEST) }
-        gyroscope?.let { sensorManager.registerListener(gyroListener, it, SensorManager.SENSOR_DELAY_FASTEST) }
-        gravity?.let { sensorManager.registerListener(gravityListener, it, SensorManager.SENSOR_DELAY_FASTEST) }
-        magnetometer?.let { sensorManager.registerListener(magnetometerListener, it, SensorManager.SENSOR_DELAY_FASTEST) }
-    }
-
-    private fun unregisterListeners() {
-        sensorManager.unregisterListener(linearAccelListener)
-        sensorManager.unregisterListener(accelerometerListener)
-        sensorManager.unregisterListener(gyroListener)
-        sensorManager.unregisterListener(gravityListener)
-        sensorManager.unregisterListener(magnetometerListener)
-    }
-
     fun onReset() {
+        resetAlertState()
+        
+        // Send reset command to Background Service
+        val intent = Intent(context, BackgroundSafetyService::class.java).apply {
+            action = BackgroundSafetyService.ACTION_RESET_DETECTOR
+        }
+        context.startService(intent)
+    }
+
+    private fun resetAlertState() {
         _accidentDetected.value = false
         _detectionTime.value = 0L
-        paperFallDetector.reset()
-        accidentDetector = AccidentDetector() // Re-instantiate to reset state
-        
         _isCountdownActive.value = false
         _showPasscodeDialog.value = false
-        countdownJob?.cancel()
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        unregisterListeners()
-        volumeSOSDetector?.stop()
         countdownJob?.cancel()
     }
 }

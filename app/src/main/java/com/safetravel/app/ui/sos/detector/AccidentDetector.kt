@@ -246,6 +246,11 @@ class AccidentDetector {
         }
     }
     
+    // Public reset function to be called from external services
+    fun reset() {
+        resetToMonitoring()
+    }
+
     private fun resetToMonitoring() {
         currentState = DetectionStateEnum.MONITORING
         impactStartTime = 0L
