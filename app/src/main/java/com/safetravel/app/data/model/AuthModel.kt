@@ -19,7 +19,10 @@ data class LoginResponse(
 )
 
 data class User(
-    @SerializedName("username") val username: String,
-    @SerializedName("email") val email: String,
-    // Add other fields if the server returns them
+    @SerializedName("id") val id: Int? = null,
+    @SerializedName("username") val username: String? = null, // Made nullable to prevent parsing errors
+    @SerializedName("email") val email: String? = null,
+    @SerializedName("phone") val phone: String? = null,
+    @SerializedName("full_name") val fullName: String? = null,
+    @SerializedName("avatar_url") val avatarUrl: String? = null
 )

@@ -1,8 +1,8 @@
-
 package com.safetravel.app.ui.createtrip
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.safetravel.app.data.repository.CircleRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,67 +14,94 @@ import javax.inject.Inject
 data class CreateTripUiState(
     val where: String = "",
     val time: String = "",
-    val duration: String = "1-2 days", // Default value for the dropdown
+    val duration: String = "",
+    val tripType: String = "",
     val hasElderly: Boolean = false,
     val hasChildren: Boolean = false,
-    val tripType: String = "Sightseeing",
     val isGenerating: Boolean = false,
-    val generatedReport: String? = null
+    val generatedReport: String? = null,
+    val isCreatingCircle: Boolean = false,
+    val createdCircleId: Int? = null,
+    val error: String? = null
 )
 
 @HiltViewModel
-class CreateTripViewModel @Inject constructor() : ViewModel() {
+class CreateTripViewModel @Inject constructor(
+    private val circleRepository: CircleRepository
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CreateTripUiState())
     val uiState = _uiState.asStateFlow()
 
-    fun onWhereChange(where: String) = _uiState.update { it.copy(where = where) }
-    fun onTimeChange(time: String) = _uiState.update { it.copy(time = time) }
-    fun onDurationChange(duration: String) = _uiState.update { it.copy(duration = duration) }
-    fun onHasElderlyChange(has: Boolean) = _uiState.update { it.copy(hasElderly = has) }
-    fun onHasChildrenChange(has: Boolean) = _uiState.update { it.copy(hasChildren = has) }
-    fun onTripTypeChange(type: String) = _uiState.update { it.copy(tripType = type) }
+    fun onWhereChange(newWhere: String) {
+        _uiState.update { it.copy(where = newWhere) }
+    }
+
+    fun onTimeChange(newTime: String) {
+        _uiState.update { it.copy(time = newTime) }
+    }
+
+    fun onDurationChange(newDuration: String) {
+        _uiState.update { it.copy(duration = newDuration) }
+    }
+
+    fun onTripTypeChange(newType: String) {
+        _uiState.update { it.copy(tripType = newType) }
+    }
+
+    fun onHasElderlyChange(newValue: Boolean) {
+        _uiState.update { it.copy(hasElderly = newValue) }
+    }
+
+    fun onHasChildrenChange(newValue: Boolean) {
+        _uiState.update { it.copy(hasChildren = newValue) }
+    }
 
     fun generateSafetyReport() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isGenerating = true, generatedReport = null) }
-            delay(2500) // Simulate AI generation
-            val currentState = _uiState.value
-            _uiState.update {
-                it.copy(
-                    isGenerating = false,
-                    generatedReport = """
-### Safety Report for your ${currentState.tripType} trip to ${currentState.where}
+            _uiState.update { it.copy(isGenerating = true) }
+            delay(2000) // Simulate API call
+            val report = """
+                ## Safety Report for ${_uiState.value.where}
+                
+                **General Advisory**: This location is generally safe, but exercise caution in crowded areas.
+                
+                **Weather**: Expect sunny weather with a chance of rain in the evening.
+                
+                **Emergency Contacts**: 
+                * Local Police: 113
+                * Ambulance: 115
+                
+                **Tips**:
+                * Keep your valuables secure.
+                * Stay hydrated.
+                ${if (_uiState.value.hasElderly) "* **Accessibility**: Check for wheelchair ramps." else ""}
+                ${if (_uiState.value.hasChildren) "* **Family**: Keep children close in busy markets." else ""}
+            """.trimIndent()
+            
+            _uiState.update { it.copy(generatedReport = report, isGenerating = false) }
+        }
+    }
 
-**Trip Details:**
-- **Date:** ${if (currentState.time.isNotBlank()) currentState.time else "Not specified"}
-- **Duration:** ${currentState.duration}
-- **Group:** ${if(currentState.hasElderly || currentState.hasChildren) "Includes vulnerable members (elderly/children)" else "Adults only"}
+    fun onStartTripClick() {
+        if (_uiState.value.createdCircleId != null) return 
 
----
-
-#### **Weather & Disaster Outlook**
-- **Forecast:** Expect partly cloudy skies with a slight chance of intermittent rain. Temperatures will be moderate.
-- **Alerts:** There are currently no active weather advisories or disaster warnings for this region. However, always stay aware of local news channels.
-
----
-
-#### **Crime & Safety Analysis**
-- **Crime Rate:** The selected area has a **low to moderate** crime rate. Petty crimes like pickpocketing in crowded tourist areas are the most common concern.
-- **High-Risk Zones:** Avoid walking alone late at night near the old city harbor. Keep valuables out of sight in markets.
-
----
-
-#### **Customized Safety Tips**
-- **General:** Share your itinerary with a trusted contact. Keep digital and physical copies of your important documents.
-- **For Children:** Establish a clear meeting point in case you get separated in crowded places. Consider using a child locator or wristband.
-- **For Elderly:** Ensure all accommodations are easily accessible. Keep a list of local emergency services and the address of your lodging handy.
-- **${currentState.tripType}-Specific:** For adventure activities, always use certified guides and check that safety equipment is up to standard.
-
-*Disclaimer: This is an AI-generated report. Information is for planning purposes only. Always consult official sources and use your best judgment.*
-""".trimIndent()
-                )
+        viewModelScope.launch {
+            _uiState.update { it.copy(isCreatingCircle = true, error = null) }
+            
+            val circleName = "Trip to ${_uiState.value.where}"
+            val result = circleRepository.createCircle(circleName, "Circle for trip to ${_uiState.value.where}")
+            
+            if (result.isSuccess) {
+                val circle = result.getOrThrow()
+                _uiState.update { it.copy(createdCircleId = circle.id, isCreatingCircle = false) }
+            } else {
+                _uiState.update { it.copy(error = "Failed to create trip circle.", isCreatingCircle = false) }
             }
         }
+    }
+    
+    fun onTripCreationNavigated() {
+        _uiState.update { it.copy(createdCircleId = null, error = null) }
     }
 }

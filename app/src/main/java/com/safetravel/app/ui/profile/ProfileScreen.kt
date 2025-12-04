@@ -7,6 +7,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -22,7 +23,8 @@ fun ProfileScreen(
     viewModel: ProfileViewModel = hiltViewModel(),
     onCreateTrip: () -> Unit,
     onManageContacts: () -> Unit,
-    onNavigateToSettings: () -> Unit // This was missing
+    onNavigateToSettings: () -> Unit,
+    onNavigateToSosAlerts: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -31,10 +33,13 @@ fun ProfileScreen(
             TopAppBar(
                 title = { Text("My Profile") },
                 actions = {
+                    // SOS Alerts Icon
+                    IconButton(onClick = onNavigateToSosAlerts) {
+                        Icon(Icons.Default.Warning, contentDescription = "SOS Alerts", tint = MaterialTheme.colorScheme.error)
+                    }
                     IconButton(onClick = onManageContacts) {
                         Icon(Icons.Default.Contacts, contentDescription = "Manage Contacts")
                     }
-                    // Use the new navigation callback
                     IconButton(onClick = onNavigateToSettings) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings")
                     }

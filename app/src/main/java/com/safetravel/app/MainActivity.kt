@@ -6,11 +6,16 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import dagger.hilt.android.AndroidEntryPoint
 import com.safetravel.app.ui.createtrip.CreateTripScreen
 import com.safetravel.app.ui.createtrip.CreateTripViewModel
 import com.safetravel.app.ui.createtrip.LocationPickerScreen
@@ -21,9 +26,9 @@ import com.safetravel.app.ui.profile.ContactsScreen
 import com.safetravel.app.ui.profile.ProfileScreen
 import com.safetravel.app.ui.profile.SettingsScreen
 import com.safetravel.app.ui.sos.AiHelpScreen
+import com.safetravel.app.ui.sos.SosAlertsScreen
 import com.safetravel.app.ui.theme.BeeTheme
-import com.safetravel.app.ui.theme.TestTheme
-import dagger.hilt.android.AndroidEntryPoint
+import com.safetravel.app.ui.trip_live.TripManagementScreen
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -63,7 +68,8 @@ fun AppNavigation() {
             ProfileScreen(
                 onCreateTrip = { navController.navigate("create_trip") },
                 onManageContacts = { navController.navigate("contacts") },
-                onNavigateToSettings = { navController.navigate("settings") } // Add navigation to settings
+                onNavigateToSettings = { navController.navigate("settings") },
+                onNavigateToSosAlerts = { navController.navigate("sos_alerts") }
             )
         }
 
@@ -80,6 +86,10 @@ fun AppNavigation() {
             ContactsScreen(onNavigateUp = { navController.popBackStack() })
         }
 
+        composable("sos_alerts") {
+            SosAlertsScreen(onNavigateUp = { navController.popBackStack() })
+        }
+
         composable("create_trip") {
             val createTripViewModel: CreateTripViewModel = hiltViewModel()
             val backStackEntry = navController.currentBackStackEntry
@@ -94,9 +104,22 @@ fun AppNavigation() {
 
             CreateTripScreen(
                 viewModel = createTripViewModel,
-                onStartTrip = { navController.navigate("main") { popUpTo("profile") { inclusive = true } } },
+                onStartTrip = { 
+                    createTripViewModel.onStartTripClick() 
+                },
                 onNavigateToLocationPicker = { navController.navigate("location_picker") }
             )
+            
+            val uiState by createTripViewModel.uiState.collectAsState()
+            
+            LaunchedEffect(uiState.createdCircleId) {
+                uiState.createdCircleId?.let { circleId ->
+                    navController.navigate("main/$circleId") { 
+                        popUpTo("profile") { inclusive = true } 
+                    }
+                    createTripViewModel.onTripCreationNavigated()
+                }
+            }
         }
 
         composable("location_picker") {
@@ -115,8 +138,15 @@ fun AppNavigation() {
             )
         }
 
-        composable("main") {
+        composable(
+            route = "main/{circleId}",
+            arguments = listOf(navArgument("circleId") { type = NavType.IntType })
+        ) {
             MainScreen(navController = navController)
+        }
+
+        composable("trip_management") {
+            TripManagementScreen(onEndTrip = { navController.navigate("profile") { popUpTo(0) } })
         }
     }
 }

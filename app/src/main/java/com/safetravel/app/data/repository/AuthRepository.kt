@@ -16,6 +16,10 @@ class AuthRepository @Inject constructor(
     // In a real production app, you would save this to EncryptedSharedPreferences or DataStore.
     var currentToken: String? = null
         private set // Only allow setting via login
+        
+    // In-memory storage for current user details
+    var currentUser: User? = null
+        private set
 
     suspend fun login(username: String, pass: String): Result<LoginResponse> {
         return try {
@@ -24,6 +28,10 @@ class AuthRepository @Inject constructor(
             if (response.isSuccessful && response.body() != null) {
                 val loginResponse = response.body()!!
                 currentToken = loginResponse.accessToken // Save the token
+                
+                // Fetch user details immediately after login
+                fetchCurrentUser()
+                
                 Log.d("AuthRepo", "Login success, token saved: ${currentToken?.take(10)}...")
                 Result.success(loginResponse)
             } else {
@@ -34,6 +42,19 @@ class AuthRepository @Inject constructor(
         } catch (e: Exception) {
             Log.e("AuthRepo", "Login exception", e)
             Result.failure(e)
+        }
+    }
+
+    private suspend fun fetchCurrentUser() {
+        val token = currentToken ?: return
+        try {
+            val response = apiService.getCurrentUser("Bearer $token")
+            if (response.isSuccessful && response.body() != null) {
+                currentUser = response.body()
+                Log.d("AuthRepo", "Fetched user ID: ${currentUser?.id}")
+            }
+        } catch (e: Exception) {
+            Log.e("AuthRepo", "Failed to fetch current user", e)
         }
     }
 
@@ -69,6 +90,7 @@ class AuthRepository @Inject constructor(
             // 2. Clear local token regardless of server success
             // (if server is down, we still want the user to be able to logout locally)
             currentToken = null
+            currentUser = null
 
             if (response.isSuccessful) {
                 Log.d("AuthRepo", "Server logout success")
@@ -81,6 +103,7 @@ class AuthRepository @Inject constructor(
         } catch (e: Exception) {
             // Even if network fails, we clear the token locally so the user isn't stuck
             currentToken = null
+            currentUser = null
             Log.e("AuthRepo", "Logout network exception", e)
             Result.success(Unit)
         }
