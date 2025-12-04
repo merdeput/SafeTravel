@@ -33,7 +33,7 @@ data class Trip(
 // --- UI State Models ---
 
 data class ProfileUiState(
-    val userName: String = "Jane Doe",
+    val userName: String = "",
     val trips: List<Trip> = emptyList()
 )
 
