@@ -6,6 +6,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -59,16 +60,24 @@ fun SensorsScreen() {
             }
 
             listeners[sensor.type] = listener
-            sensorManager.registerListener(
-                listener,
-                sensor,
-                SensorManager.SENSOR_DELAY_UI
-            )
+            try {
+                sensorManager.registerListener(
+                    listener,
+                    sensor,
+                    SensorManager.SENSOR_DELAY_UI
+                )
+            } catch (e: Exception) {
+                Log.e("SensorsScreen", "Failed to register listener for ${sensor.name}", e)
+            }
         }
 
         onDispose {
             listeners.forEach { (_, listener) ->
-                sensorManager.unregisterListener(listener)
+                try {
+                    sensorManager.unregisterListener(listener)
+                } catch (e: Exception) {
+                    Log.e("SensorsScreen", "Failed to unregister listener", e)
+                }
             }
         }
     }
