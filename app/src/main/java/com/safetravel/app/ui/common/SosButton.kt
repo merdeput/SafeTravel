@@ -2,15 +2,21 @@ package com.safetravel.app.ui.common
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -41,11 +47,10 @@ fun SosButton(
                     secondsRemaining = state.secondsRemaining,
                     error = uiState.passcodeError,
                     onVerify = viewModel::onVerifyPasscode,
-                    onDismiss = viewModel::onPasscodeDialogDismiss // Use the new dismiss handler
+                    onDismiss = viewModel::onPasscodeDialogDismiss 
                 )
             }
             is SosState.NavigateToAiHelp -> {
-                // This state triggers navigation in the parent. Show a placeholder while navigating.
                 Spacer(modifier = Modifier.size(100.dp))
             }
         }
@@ -74,24 +79,67 @@ private fun SosActivationButton(
         animationSpec = tween(durationMillis = 5000),
         label = "HoldProgress"
     )
+    
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.95f else 1f,
+        label = "ButtonScale"
+    )
 
     Box(contentAlignment = Alignment.Center) {
+        // Progress Indicator Ring
         CircularProgressIndicator(
-            progress = holdProgress,
-            modifier = Modifier.size(120.dp),
+            progress = { holdProgress },
+            modifier = Modifier.size(140.dp),
             strokeWidth = 8.dp,
             strokeCap = StrokeCap.Round,
             color = MaterialTheme.colorScheme.error,
-            trackColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
+            trackColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f),
         )
 
-        Button(
-            onClick = { /* Clicks are disabled, only press and hold works */ },
-            interactionSource = interactionSource,
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-            modifier = Modifier.size(100.dp)
+        // The Main Button
+        Surface(
+            modifier = Modifier
+                .size(110.dp)
+                .scale(scale),
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.error,
+            shadowElevation = 6.dp
         ) {
-            Text("SOS", fontSize = 24.sp)
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.clickable(
+                    interactionSource = interactionSource,
+                    indication = null, // handled by custom scale animation
+                    onClick = { } // No-op click, logic is in press/release
+                )
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Warning, 
+                        contentDescription = null, 
+                        tint = Color.White, 
+                        modifier = Modifier.size(32.dp)
+                    )
+                    Text(
+                        text = "SOS", 
+                        color = Color.White, 
+                        fontWeight = FontWeight.Bold, 
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                }
+            }
+        }
+        
+        if (sosState is SosState.Idle) {
+            Text(
+                text = "Hold to Activate",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.align(Alignment.BottomCenter).offset(y = 80.dp)
+            )
         }
     }
 }
@@ -100,28 +148,47 @@ private fun SosActivationButton(
 private fun SosCountdownDialog(secondsRemaining: Int, onImOkayClick: () -> Unit, onSendHelpClick: () -> Unit) {
     AlertDialog(
         onDismissRequest = {},
-        title = { Text("Are you okay?", textAlign = TextAlign.Center) },
-        text = {
+        title = { 
             Text(
-                text = "Sending alert in $secondsRemaining seconds",
-                fontSize = 18.sp,
+                "Are you okay?", 
                 textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            ) 
+        },
+        text = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "Sending alert in",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Text(
+                    text = "$secondsRemaining",
+                    style = MaterialTheme.typography.displayMedium,
+                    color = MaterialTheme.colorScheme.error,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "seconds",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+            }
         },
         confirmButton = {
             Button(
                 onClick = onSendHelpClick,
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.medium
             ) {
-                Text("SEND HELP NOW")
+                Text("SEND HELP NOW", fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
             OutlinedButton(
                 onClick = onImOkayClick,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.medium
             ) {
                 Text("I'm Okay")
             }
@@ -135,29 +202,36 @@ private fun SosPasscodeDialog(secondsRemaining: Int, error: String?, onVerify: (
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Enter Passcode to Cancel") },
+        title = { Text("Cancel SOS") },
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = "Sending alert in $secondsRemaining seconds",
+                    text = "Sending alert in $secondsRemaining s",
                     color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
                 OutlinedTextField(
                     value = passcode,
                     onValueChange = { passcode = it },
-                    label = { Text("Passcode") },
+                    label = { Text("Enter Passcode") },
                     visualTransformation = PasswordVisualTransformation(),
-                    isError = error != null
+                    isError = error != null,
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium
                 )
                 error?.let {
-                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
                 }
             }
         },
         confirmButton = {
-            Button(onClick = { onVerify(passcode) }) {
+            Button(
+                onClick = { onVerify(passcode) },
+                shape = MaterialTheme.shapes.medium
+            ) {
                 Text("Confirm")
             }
         }

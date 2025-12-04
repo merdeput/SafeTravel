@@ -84,23 +84,37 @@ fun InTripScreen(
             }
 
             // Bottom section: Location Data and Logs
-            Column(
+            Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(8.dp)
+                    .padding(16.dp) // 1. Outer Padding: Pushes the card away from the screen edges
             ) {
-                val location = uiState.currentLocation // Capture the location in a stable local variable
-                if (location != null) {
-                    Text("Lat: ${String.format("%.6f", location.latitude)}, Lng: ${String.format("%.6f", location.longitude)}")
-                    uiState.locationAccuracy?.let { Text("Accuracy: ${String.format("%.1f", it)}m") }
-                } else {
-                    Text("Waiting for location...")
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-                Text("Activity Log:", style = MaterialTheme.typography.labelMedium)
-                Column(modifier = Modifier.heightIn(max = 100.dp)) {
-                    uiState.logMessages.forEach { message ->
-                        Text(message, style = MaterialTheme.typography.bodySmall)
+                Column(
+                    modifier = Modifier
+                        .padding(16.dp) // 2. Inner Padding: Pushes the text away from the card edges
+                ) {
+                    val location = uiState.currentLocation
+                    if (location != null) {
+                        Text(
+                            text = "Lat: ${String.format("%.6f", location.latitude)}, Lng: ${String.format("%.6f", location.longitude)}",
+                            style = MaterialTheme.typography.titleMedium // 3. Style: Makes the main info pop
+                        )
+                        uiState.locationAccuracy?.let {
+                            Text("Accuracy: ${String.format("%.1f", it)}m", style = MaterialTheme.typography.bodyMedium)
+                        }
+                    } else {
+                        Text("Waiting for location...", style = MaterialTheme.typography.bodyLarge)
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Divider() // 4. Visual Divider: Cleanly separates data from logs
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text("Activity Log:", style = MaterialTheme.typography.labelMedium)
+                    Column(modifier = Modifier.heightIn(max = 100.dp)) {
+                        uiState.logMessages.forEach { message ->
+                            Text(message, style = MaterialTheme.typography.bodySmall)
+                        }
                     }
                 }
             }

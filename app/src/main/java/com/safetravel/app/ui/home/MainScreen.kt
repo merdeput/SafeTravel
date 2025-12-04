@@ -140,18 +140,35 @@ private fun AppBottomNavigation(
     } catch (e: Exception) { null }
     val circleId = parentEntry?.arguments?.getInt("circleId")
 
-    NavigationBar {
+    NavigationBar(
+        containerColor = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface
+    ) {
         NavigationBarItem(
             icon = { Icon(Icons.Default.LocationOn, contentDescription = "In Trip") },
             label = { Text("Map") },
             selected = currentRoute == Screen.InTrip.route,
-            onClick = { navigateToScreen(navController, Screen.InTrip.route) }
+            onClick = { navigateToScreen(navController, Screen.InTrip.route) },
+            colors = NavigationBarItemDefaults.colors(
+                selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         )
         NavigationBarItem(
             icon = { Icon(Icons.Default.Warning, contentDescription = "Accident Detection") },
             label = { Text("Detection") },
             selected = currentRoute == Screen.AccidentDetection.route,
-            onClick = { navigateToScreen(navController, Screen.AccidentDetection.route) }
+            onClick = { navigateToScreen(navController, Screen.AccidentDetection.route) },
+            colors = NavigationBarItemDefaults.colors(
+                selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         )
         NavigationBarItem(
             icon = { Icon(Icons.Default.Group, contentDescription = "Trip Management") },
@@ -162,13 +179,27 @@ private fun AppBottomNavigation(
                 // Construct the route dynamically with the ID
                 val route = if (circleId != null) "trip_management/$circleId" else "trip_management/0"
                 navigateToScreen(navController, route) 
-            }
+            },
+            colors = NavigationBarItemDefaults.colors(
+                selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         )
         NavigationBarItem(
             icon = { Icon(Icons.Default.Build, contentDescription = "Debug") },
             label = { Text("Debug") },
             selected = currentRoute == Screen.Sensors.route,
-            onClick = { navigateToScreen(navController, Screen.Sensors.route) }
+            onClick = { navigateToScreen(navController, Screen.Sensors.route) },
+            colors = NavigationBarItemDefaults.colors(
+                selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         )
     }
 }

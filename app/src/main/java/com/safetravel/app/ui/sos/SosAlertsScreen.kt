@@ -121,17 +121,23 @@ fun SosAlertsScreen(
     ) { paddingValues ->
         Column(modifier = Modifier.padding(paddingValues).fillMaxSize()) {
             // Tabs
-            TabRow(selectedTabIndex = selectedTab) {
+            TabRow(
+                selectedTabIndex = selectedTab,
+                containerColor = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.primary
+            ) {
                 Tab(
                     selected = selectedTab == 0,
                     onClick = { selectedTab = 0 },
                     text = { 
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                            Icon(Icons.Default.Warning, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("SOS Alerts") 
                         }
-                    }
+                    },
+                    selectedContentColor = MaterialTheme.colorScheme.primary,
+                    unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Tab(
                     selected = selectedTab == 1,
@@ -144,11 +150,13 @@ fun SosAlertsScreen(
                             val unreadCount = uiState.notifications.count { !it.isRead }
                             Text(if (unreadCount > 0) "Notifications ($unreadCount)" else "Notifications")
                         }
-                    }
+                    },
+                    selectedContentColor = MaterialTheme.colorScheme.primary,
+                    unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            Box(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
                 if (uiState.isLoading) {
                     CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                 } else {
@@ -171,7 +179,7 @@ fun SosAlertsScreen(
 fun SosAlertsList(alerts: List<SosAlertResponse>, onResolve: (Int) -> Unit) {
     if (alerts.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No SOS alerts history.")
+            Text("No SOS alerts history.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     } else {
         LazyColumn(
@@ -193,11 +201,12 @@ fun NotificationsList(
 ) {
     if (notifications.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No notifications.")
+            Text("No notifications.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     } else {
         LazyColumn(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(notifications) { notification ->
                 NotificationItem(
@@ -205,7 +214,6 @@ fun NotificationsList(
                     onClick = { onMarkRead(notification.id) },
                     onDelete = { onDelete(notification.id) }
                 )
-                Divider()
             }
         }
     }
@@ -213,12 +221,14 @@ fun NotificationsList(
 
 @Composable
 fun SosAlertItem(alert: SosAlertResponse, onResolve: () -> Unit) {
+    val isResolved = alert.status == "resolved"
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = if (alert.status == "resolved") MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.1f)
+            containerColor = if (isResolved) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.1f)
         ),
-        border = if (alert.status != "resolved") androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error) else null
+        border = if (!isResolved) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error) else null,
+        shape = MaterialTheme.shapes.medium
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
@@ -226,22 +236,31 @@ fun SosAlertItem(alert: SosAlertResponse, onResolve: () -> Unit) {
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = if (alert.status == "resolved") "RESOLVED" else "SOS ACTIVE",
-                    color = if (alert.status == "resolved") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                    text = if (isResolved) "RESOLVED" else "SOS ACTIVE",
+                    color = if (isResolved) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold
                 )
-                Text(text = alert.createdAt ?: "", style = MaterialTheme.typography.bodySmall)
+                Text(
+                    text = alert.createdAt ?: "", 
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
             Spacer(modifier = Modifier.height(8.dp))
-            Text("Message: ${alert.message}", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                text = "Message: ${alert.message}", 
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
             
-            if (alert.status != "resolved") {
+            if (!isResolved) {
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(
                     onClick = onResolve,
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary),
+                    shape = MaterialTheme.shapes.small
                 ) {
                     Text("Mark as Resolved")
                 }
@@ -256,29 +275,36 @@ fun NotificationItem(
     onClick: () -> Unit,
     onDelete: () -> Unit
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(if (notification.isRead) Color.Transparent else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.1f))
-            .clickable(onClick = onClick)
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically
+    Card(
+        onClick = onClick,
+        colors = CardDefaults.cardColors(
+            containerColor = if (notification.isRead) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.secondaryContainer
+        ),
+        shape = MaterialTheme.shapes.medium
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = notification.message,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = if (notification.isRead) FontWeight.Normal else FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = notification.createdAt ?: "",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        IconButton(onClick = onDelete) {
-            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = notification.message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (notification.isRead) FontWeight.Normal else FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = notification.createdAt ?: "",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }
