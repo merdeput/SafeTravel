@@ -18,12 +18,15 @@ import com.safetravel.app.data.repository.LocationService
 import com.safetravel.app.data.repository.SensorDataRepository
 import com.safetravel.app.ui.sos.detector.AccidentDetector
 import com.safetravel.app.ui.sos.detector.PaperFallDetector
+import com.safetravel.app.ui.sos.detector.VolumeSOSDetector
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -46,6 +49,7 @@ class BackgroundSafetyService : Service(), SensorEventListener {
     private lateinit var sensorManager: SensorManager
     private var accidentDetector = AccidentDetector()
     private val paperFallDetector = PaperFallDetector()
+    private lateinit var volumeSOSDetector: VolumeSOSDetector
     
     // Sensors
     private var linearAcceleration: Sensor? = null
@@ -58,6 +62,9 @@ class BackgroundSafetyService : Service(), SensorEventListener {
 
     // Channel to process sensor events sequentially and avoid concurrency issues
     private val sensorEventChannel = Channel<SensorEventData>(Channel.UNLIMITED)
+    
+    // Job for the alert countdown
+    private var alertCountdownJob: Job? = null
 
     private data class SensorEventData(
         val sensorType: Int,
@@ -67,6 +74,7 @@ class BackgroundSafetyService : Service(), SensorEventListener {
     
     companion object {
         const val ACTION_RESET_DETECTOR = "com.safetravel.app.action.RESET_DETECTOR"
+        const val ACTION_ALERT_SENT = "com.safetravel.app.action.ALERT_SENT"
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -79,6 +87,12 @@ class BackgroundSafetyService : Service(), SensorEventListener {
         gyroscope = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
         gravity = sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY)
         magnetometer = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
+        
+        // Initialize Volume SOS Detector
+        volumeSOSDetector = VolumeSOSDetector(this) {
+            showAccidentAlertNotification()
+        }
+        volumeSOSDetector.start()
 
         // Start processing sensor events sequentially
         serviceScope.launch {
@@ -91,19 +105,24 @@ class BackgroundSafetyService : Service(), SensorEventListener {
         sensorDataRepository.latestDetectionState
             .onEach { state ->
                 if (state.accidentConfirmed) {
-                    showAccidentAlertNotification()
+                    // Ensure we don't start multiple countdowns for the same event
+                    if (alertCountdownJob?.isActive != true) {
+                        showAccidentAlertNotification()
+                    }
                 }
             }
             .launchIn(serviceScope)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_RESET_DETECTOR) {
-            resetDetectors()
-        } else {
-            startForegroundService()
-            startLocationTracking()
-            registerSensors()
+        when (intent?.action) {
+            ACTION_RESET_DETECTOR -> resetDetectors()
+            ACTION_ALERT_SENT -> showAlertSentNotification()
+            else -> {
+                startForegroundService()
+                startLocationTracking()
+                registerSensors()
+            }
         }
         return START_STICKY
     }
@@ -111,6 +130,14 @@ class BackgroundSafetyService : Service(), SensorEventListener {
     private fun resetDetectors() {
         accidentDetector.reset()
         paperFallDetector.reset()
+        // Cancel any pending alert countdown
+        alertCountdownJob?.cancel()
+        alertCountdownJob = null
+        
+        // Clear notifications if needed (optional, but good UX)
+        val notificationManager = getSystemService(NotificationManager::class.java)
+        notificationManager.cancel(2) // Cancel accident notification
+        notificationManager.cancel(3) // Cancel fall notification
     }
 
     private fun startForegroundService() {
@@ -121,7 +148,9 @@ class BackgroundSafetyService : Service(), SensorEventListener {
             NotificationChannel(channelId, channelName, NotificationManager.IMPORTANCE_LOW)
         )
 
-        val pendingIntent: PendingIntent = Intent(this, MainActivity::class.java).let { notificationIntent ->
+        val pendingIntent: PendingIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }.let { notificationIntent ->
             PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE)
         }
 
@@ -147,7 +176,9 @@ class BackgroundSafetyService : Service(), SensorEventListener {
             }
         )
 
-        val pendingIntent: PendingIntent = Intent(this, MainActivity::class.java).let { notificationIntent ->
+        val pendingIntent: PendingIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }.let { notificationIntent ->
             PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE)
         }
 
@@ -161,6 +192,75 @@ class BackgroundSafetyService : Service(), SensorEventListener {
             .build()
 
         notificationManager.notify(2, notification)
+        
+        // Start countdown to send alert
+        startAlertCountdown()
+    }
+    
+    private fun startAlertCountdown() {
+        alertCountdownJob?.cancel()
+        alertCountdownJob = serviceScope.launch {
+            delay(30000) // 30 seconds delay
+            showAlertSentNotification()
+            // Here you would also trigger the actual API call or SMS
+        }
+    }
+
+    private fun showFallAlertNotification() {
+        val channelId = "safety_alert_channel"
+        val channelName = "Emergency Alerts"
+        val notificationManager = getSystemService(NotificationManager::class.java)
+        notificationManager.createNotificationChannel(
+            NotificationChannel(channelId, channelName, NotificationManager.IMPORTANCE_HIGH).apply {
+                enableVibration(true)
+            }
+        )
+
+        val pendingIntent: PendingIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }.let { notificationIntent ->
+            PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE)
+        }
+
+        val notification = NotificationCompat.Builder(this, channelId)
+            .setContentTitle("FALL DETECTED")
+            .setContentText("A fall was detected. Tap if you are okay.")
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .build()
+
+        notificationManager.notify(3, notification)
+    }
+
+    private fun showAlertSentNotification() {
+        val channelId = "safety_alert_channel"
+        val channelName = "Emergency Alerts"
+        val notificationManager = getSystemService(NotificationManager::class.java)
+        notificationManager.createNotificationChannel(
+            NotificationChannel(channelId, channelName, NotificationManager.IMPORTANCE_HIGH).apply {
+                enableVibration(true)
+            }
+        )
+
+        val pendingIntent: PendingIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }.let { notificationIntent ->
+            PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE)
+        }
+
+        val notification = NotificationCompat.Builder(this, channelId)
+            .setContentTitle("ALERT SENT")
+            .setContentText("Emergency contacts have been notified.")
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .build()
+
+        notificationManager.notify(4, notification)
     }
 
     private fun startLocationTracking() {
@@ -206,7 +306,7 @@ class BackgroundSafetyService : Service(), SensorEventListener {
                 sensorDataRepository.updatePaperState(paperFallDetector.getCurrentStateName())
 
                 if (isPaperFall) {
-                    // TODO: Trigger Background Alert
+                    showFallAlertNotification()
                 }
             }
             Sensor.TYPE_GYROSCOPE -> {
@@ -227,5 +327,8 @@ class BackgroundSafetyService : Service(), SensorEventListener {
         super.onDestroy()
         sensorManager.unregisterListener(this)
         serviceScope.cancel()
+        if (::volumeSOSDetector.isInitialized) {
+            volumeSOSDetector.stop()
+        }
     }
 }
