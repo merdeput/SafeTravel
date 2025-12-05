@@ -120,9 +120,8 @@ class SosButtonViewModel @Inject constructor(
              val lat = 34.052235
              val lng = -118.243683
              
-             // val currentUser = authRepository.currentUser
-             // val userId = currentUser?.id
-             val userId = 7 // Hardcoded for testing as requested
+             val currentUser = authRepository.currentUser
+             val userId = currentUser?.id
              
              if (userId != null) {
                  val result = sosRepository.sendSos(
@@ -146,6 +145,10 @@ class SosButtonViewModel @Inject constructor(
                  }
              } else {
                   _uiState.update { it.copy(sendError = "User not authenticated") }
+                  // If not authenticated, we still probably want to navigate to AI help locally
+                  if (_uiState.value.sosState !is SosState.NavigateToAiHelp) {
+                       _uiState.update { it.copy(sosState = SosState.NavigateToAiHelp) }
+                  }
              }
              
              _uiState.update { it.copy(isSending = false) }
