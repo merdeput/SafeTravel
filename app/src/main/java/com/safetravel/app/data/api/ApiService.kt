@@ -14,6 +14,8 @@ import com.safetravel.app.data.model.NotificationResponse
 import com.safetravel.app.data.model.RegisterRequest
 import com.safetravel.app.data.model.SendSosRequest
 import com.safetravel.app.data.model.SosAlertResponse
+import com.safetravel.app.data.model.TripBase
+import com.safetravel.app.data.model.TripDTO
 import com.safetravel.app.data.model.UpdateCircleRequest
 import com.safetravel.app.data.model.UpdateNotificationRequest
 import com.safetravel.app.data.model.UpdateSosStatusRequest
@@ -205,4 +207,37 @@ interface ApiService {
         @Header("Authorization") token: String,
         @Path("notification_id") notificationId: Int
     ): Response<Unit>
+
+    // --- TRIP ENDPOINTS ---
+
+    @GET("api/trips/{trip_id}")
+    suspend fun getTripById(
+        @Header("Authorization") token: String,
+        @Path("trip_id") tripId: Int
+    ): Response<TripDTO>
+
+    @GET("api/users/{user_id}/trips")
+    suspend fun getTripsByUser(
+        @Header("Authorization") token: String,
+        @Path("user_id") userId: Int
+    ): Response<List<TripDTO>>
+
+    @POST("api/trips/")
+    suspend fun createTrip(
+        @Header("Authorization") token: String,
+        @Body tripData: TripBase
+    ): Response<TripDTO>
+
+    @DELETE("api/trips/{trip_id}")
+    suspend fun deleteTrip(
+        @Header("Authorization") token: String,
+        @Path("trip_id") tripId: Int
+    ): Response<Unit>
+
+    @PUT("api/trips/{trip_id}")
+    suspend fun updateTrip(
+        @Header("Authorization") token: String,
+        @Path("trip_id") tripId: Int,
+        @Body tripData: TripBase
+    ): Response<TripDTO>
 }

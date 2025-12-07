@@ -1,5 +1,6 @@
 package com.safetravel.app.ui.profile
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -7,6 +8,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
@@ -20,6 +22,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 
@@ -93,23 +96,65 @@ fun ProfileScreen(
                 }
             }
 
-            // --- Trips Section ---
-            item {
-                Text(
-                    text = "My Trips",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            if (uiState.trips.isEmpty()) {
+            if (uiState.isLoading) {
                 item {
-                    EmptyTripsState()
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
                 }
             } else {
-                items(uiState.trips) { trip ->
-                    TripItem(trip = trip, onClick = { /* TODO: Navigate to trip details */ })
+                // --- Current Trip ---
+                if (uiState.currentTrip != null) {
+                    item {
+                        Text(
+                            text = "Current Trip",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    item {
+                        TripItem(
+                            trip = uiState.currentTrip!!,
+                            isCurrent = true,
+                            onClick = { /* TODO: Navigate to trip details */ }
+                        )
+                    }
+                } else if (uiState.pastTrips.isEmpty()) {
+                    // Show empty state if no current AND no past trips
+                    item {
+                        EmptyTripsState()
+                    }
                 }
+
+                // --- Past Trips ---
+                if (uiState.pastTrips.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "Past Trips",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    items(uiState.pastTrips) { trip ->
+                        TripItem(
+                            trip = trip,
+                            isCurrent = false,
+                            onClick = { /* TODO: Navigate to trip details */ }
+                        )
+                    }
+                }
+            }
+            
+            if (uiState.error != null) {
+                 item {
+                    Text(
+                        text = uiState.error!!,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center
+                    )
+                 }
             }
         }
     }
@@ -194,7 +239,7 @@ private fun EmptyTripsState() {
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Column(
             modifier = Modifier
@@ -211,19 +256,31 @@ private fun EmptyTripsState() {
                 text = "Create a new trip to get started with safety monitoring.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                textAlign = TextAlign.Center
             )
         }
     }
 }
 
 @Composable
-private fun TripItem(trip: Trip, onClick: () -> Unit) {
+private fun TripItem(trip: Trip, isCurrent: Boolean, onClick: () -> Unit) {
+    val containerColor = if (isCurrent) 
+        MaterialTheme.colorScheme.primaryContainer 
+    else 
+        MaterialTheme.colorScheme.surface
+    
+    val contentColor = if (isCurrent)
+        MaterialTheme.colorScheme.onPrimaryContainer
+    else
+        MaterialTheme.colorScheme.onSurface
+
     Card(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isCurrent) 4.dp else 2.dp),
+        colors = CardDefaults.cardColors(containerColor = containerColor)
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -233,19 +290,31 @@ private fun TripItem(trip: Trip, onClick: () -> Unit) {
                 Text(
                     text = trip.destination,
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    color = contentColor
                 )
                 Spacer(modifier = Modifier.height(4.dp))
+                
+                // Format date display simply
+                val dateText = try {
+                    // Simplistic display of raw string or formatted
+                    val start = trip.startDate.split("T")[0]
+                    val end = trip.endDate.split("T")[0]
+                    "$start - $end"
+                } catch (e: Exception) {
+                    trip.startDate
+                }
+                
                 Text(
-                    text = trip.date,
+                    text = dateText,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = contentColor.copy(alpha = 0.8f)
                 )
             }
             Icon(
-                imageVector = Icons.Default.Settings, // Placeholder for trip details icon
+                imageVector = Icons.Default.ArrowForward,
                 contentDescription = "Details",
-                tint = MaterialTheme.colorScheme.primary
+                tint = contentColor
             )
         }
     }

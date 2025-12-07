@@ -2,13 +2,18 @@ package com.safetravel.app.ui.createtrip
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.safetravel.app.data.model.TripBase
+import com.safetravel.app.data.repository.AuthRepository
 import com.safetravel.app.data.repository.CircleRepository
+import com.safetravel.app.data.repository.TripRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
 data class CreateTripUiState(
@@ -20,14 +25,16 @@ data class CreateTripUiState(
     val hasChildren: Boolean = false,
     val isGenerating: Boolean = false,
     val generatedReport: String? = null,
-    val isCreatingCircle: Boolean = false,
-    val createdCircleId: Int? = null,
+    val isCreatingTrip: Boolean = false,
+    val createdCircleId: Int? = null, // Restored for navigation in MainActivity
     val error: String? = null
 )
 
 @HiltViewModel
 class CreateTripViewModel @Inject constructor(
-    private val circleRepository: CircleRepository
+    private val circleRepository: CircleRepository,
+    private val tripRepository: TripRepository,
+    private val authRepository: AuthRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CreateTripUiState())
@@ -86,19 +93,75 @@ class CreateTripViewModel @Inject constructor(
     fun onStartTripClick() {
         if (_uiState.value.createdCircleId != null) return 
 
+        val currentUser = authRepository.currentUser
+        if (currentUser?.id == null) {
+             _uiState.update { it.copy(error = "User not logged in.") }
+            return
+        }
+
         viewModelScope.launch {
-            _uiState.update { it.copy(isCreatingCircle = true, error = null) }
+            _uiState.update { it.copy(isCreatingTrip = true, error = null) }
             
+            // 1. Create Circle
             val circleName = "Trip to ${_uiState.value.where}"
-            val result = circleRepository.createCircle(circleName, "Circle for trip to ${_uiState.value.where}")
+            val circleResult = circleRepository.createCircle(circleName, "Circle for trip to ${_uiState.value.where}")
             
-            if (result.isSuccess) {
-                val circle = result.getOrThrow()
-                _uiState.update { it.copy(createdCircleId = circle.id, isCreatingCircle = false) }
+            if (circleResult.isFailure) {
+                _uiState.update { it.copy(error = "Failed to create circle: ${circleResult.exceptionOrNull()?.message}", isCreatingTrip = false) }
+                return@launch
+            }
+            
+            val circleId = circleResult.getOrThrow().id
+
+            // 2. Prepare Trip Data
+            val (startDate, endDate) = calculateDates(_uiState.value.time, _uiState.value.duration)
+            
+            val tripBase = TripBase(
+                userId = currentUser.id,
+                tripName = "Trip to ${_uiState.value.where}",
+                destination = _uiState.value.where,
+                startDate = startDate,
+                endDate = endDate,
+                tripType = _uiState.value.tripType.ifBlank { "Leisure" }, // Default
+                haveElderly = _uiState.value.hasElderly,
+                haveChildren = _uiState.value.hasChildren,
+                circleId = circleId,
+                notes = "Auto-generated trip"
+            )
+
+            // 3. Create Trip
+            val tripResult = tripRepository.createTrip(tripBase)
+            
+            if (tripResult.isSuccess) {
+                _uiState.update { it.copy(createdCircleId = circleId, isCreatingTrip = false) }
             } else {
-                _uiState.update { it.copy(error = "Failed to create trip circle.", isCreatingCircle = false) }
+                _uiState.update { it.copy(error = "Failed to create trip: ${tripResult.exceptionOrNull()?.message}", isCreatingTrip = false) }
             }
         }
+    }
+    
+    private fun calculateDates(dateStr: String, durationStr: String): Pair<String, String> {
+        val formatter = DateTimeFormatter.ofPattern("MM/dd/yyyy")
+        val isoFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
+        
+        val start = try {
+            LocalDate.parse(dateStr, formatter).atStartOfDay()
+        } catch (e: Exception) {
+            LocalDate.now().atStartOfDay()
+        }
+
+        val daysToAdd = when {
+            durationStr.contains("1-2 days") -> 2L
+            durationStr.contains("3-4 days") -> 4L
+            durationStr.contains("1 week") -> 7L
+            durationStr.contains("2 weeks") -> 14L
+            durationStr.contains("1 month") -> 30L
+            else -> 1L // Default
+        }
+        
+        val end = start.plusDays(daysToAdd)
+        
+        return Pair(start.format(isoFormatter), end.format(isoFormatter))
     }
     
     fun onTripCreationNavigated() {

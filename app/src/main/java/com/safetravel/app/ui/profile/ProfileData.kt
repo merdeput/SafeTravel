@@ -21,20 +21,31 @@ data class Circle(
     val name: String,
     val memberIds: List<String>,
     val description: String? = null,
-    val members: List<User> = emptyList() // Changed from CircleMemberResponse to User to match backend logic
+    val members: List<User> = emptyList()
 )
 
 data class Trip(
-    val id: String,
+    val id: Int,
     val destination: String,
-    val date: String
+    val startDate: String,
+    val endDate: String,
+    val status: TripStatus
 )
+
+enum class TripStatus {
+    UPCOMING,
+    ONGOING,
+    COMPLETED
+}
 
 // --- UI State Models ---
 
 data class ProfileUiState(
     val userName: String = "",
-    val trips: List<Trip> = emptyList()
+    val currentTrip: Trip? = null,
+    val pastTrips: List<Trip> = emptyList(),
+    val isLoading: Boolean = false,
+    val error: String? = null
 )
 
 data class ContactsUiState(

@@ -62,6 +62,9 @@ fun CreateTripScreen(
     val uiState by viewModel.uiState.collectAsState()
     var showDatePicker by remember { mutableStateOf(false) }
 
+    // Navigation is handled by the parent (MainActivity) observing uiState.createdCircleId
+    // We just trigger the action via the button.
+
     Scaffold(
         topBar = {
             TopAppBar(title = { Text("Plan Your New Trip") })
@@ -125,11 +128,29 @@ fun CreateTripScreen(
                 Divider(modifier = Modifier.padding(vertical = 16.dp))
                 MarkdownText(markdownText = it)
                 Spacer(modifier = Modifier.height(24.dp))
+                
+                // Show Error if any
+                if (uiState.error != null) {
+                    Text(
+                        text = uiState.error ?: "",
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                }
+
                 Button(
-                    onClick = onStartTrip,
+                    onClick = { viewModel.onStartTripClick() },
+                    enabled = !uiState.isCreatingTrip,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Start Trip")
+                    if (uiState.isCreatingTrip) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                    } else {
+                        Text("Start Trip")
+                    }
                 }
             }
 
