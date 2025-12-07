@@ -3,6 +3,7 @@ package com.safetravel.app.ui.home
 import android.Manifest
 import android.content.Intent
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
@@ -12,7 +13,6 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -33,7 +33,7 @@ import com.safetravel.app.ui.trip_live.TripManagementScreen
 // Screen routes for the main dashboard
 sealed class Screen(val route: String, val title: String) {
     object InTrip : Screen("in_trip", "In Trip")
-    object TripManagement : Screen("trip_management/{circleId}", "Trip Mgmt") 
+    object TripManagement : Screen("trip_management/{circleId}", "Trip Mgmt")
     object AccidentDetection : Screen("accident", "Accident Detection")
     object Sensors : Screen("sensors", "Sensors")
 }
@@ -45,7 +45,8 @@ fun MainScreen(navController: NavHostController) { // Pass NavController from pa
     val bottomNavController = rememberNavController()
     val navBackStackEntry by bottomNavController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
-    
+
+    // Define permissions to request
     val permissionsToRequest = remember {
         mutableListOf(
             Manifest.permission.ACCESS_COARSE_LOCATION,
@@ -59,16 +60,18 @@ fun MainScreen(navController: NavHostController) { // Pass NavController from pa
 
     val permissionState = rememberMultiplePermissionsState(permissionsToRequest)
 
+    // Request permissions on launch
     LaunchedEffect(Unit) {
         if (!permissionState.allPermissionsGranted) {
             permissionState.launchMultiplePermissionRequest()
         }
     }
 
-    val isLocationGranted = permissionState.permissions.any { 
-        (it.permission == Manifest.permission.ACCESS_FINE_LOCATION || 
-         it.permission == Manifest.permission.ACCESS_COARSE_LOCATION) && 
-         it.status.isGranted 
+    // Start Background Service ONLY when Location permission is granted
+    val isLocationGranted = permissionState.permissions.any {
+        (it.permission == Manifest.permission.ACCESS_FINE_LOCATION ||
+                it.permission == Manifest.permission.ACCESS_COARSE_LOCATION) &&
+                it.status.isGranted
     }
 
     LaunchedEffect(isLocationGranted) {
@@ -78,10 +81,15 @@ fun MainScreen(navController: NavHostController) { // Pass NavController from pa
         }
     }
 
+    // Handle system back press to navigate to profile, ensuring it reloads
+    BackHandler {
+        navController.navigate("profile") { popUpTo("profile") { inclusive = true } }
+    }
+
     Scaffold(
         bottomBar = {
             AppBottomNavigation(
-                navController = bottomNavController, 
+                navController = bottomNavController,
                 currentRoute = currentRoute,
                 parentNavController = navController
             )
@@ -89,27 +97,28 @@ fun MainScreen(navController: NavHostController) { // Pass NavController from pa
     ) { paddingValues ->
         NavHost(
             navController = bottomNavController,
-            startDestination = Screen.InTrip.route, 
+            startDestination = Screen.InTrip.route, // Start at the InTrip screen
             modifier = Modifier.padding(paddingValues)
         ) {
             composable(Screen.InTrip.route) {
+                // Pass the main NavController to InTripScreen
                 InTripScreen(navController = navController)
             }
-            
+
             composable(
                 route = "trip_management/{circleId}",
                 arguments = listOf(navArgument("circleId") { type = NavType.IntType })
             ) {
                 TripManagementScreen(
-                    onEndTrip = { 
-                        navController.navigate("profile") { popUpTo(0) } 
+                    onEndTrip = {
+                        navController.navigate("profile") { popUpTo(0) }
                     },
                     onNavigateToProfile = {
                         navController.navigate("profile") { popUpTo("profile") { inclusive = true } }
                     }
                 )
             }
-            
+
             composable(Screen.AccidentDetection.route) {
                 AccidentDetectionScreen()
             }
@@ -122,13 +131,15 @@ fun MainScreen(navController: NavHostController) { // Pass NavController from pa
 
 @Composable
 private fun AppBottomNavigation(
-    navController: NavHostController, 
+    navController: NavHostController,
     currentRoute: String?,
-    parentNavController: NavHostController
+    parentNavController: NavHostController // Pass parent controller to retrieve ID
 ) {
     val parentEntry = try {
         parentNavController.getBackStackEntry("main/{circleId}")
-    } catch (e: Exception) { null }
+    } catch (e: Exception) {
+        null
+    }
     val circleId = parentEntry?.arguments?.getInt("circleId")
 
     NavigationBar(
@@ -164,10 +175,12 @@ private fun AppBottomNavigation(
         NavigationBarItem(
             icon = { Icon(Icons.Default.Group, contentDescription = "Trip Management") },
             label = { Text("Trip Mgmt") },
-            selected = currentRoute?.startsWith("trip_management") == true, 
-            onClick = { 
+            // Use startsWith because the route now has a parameter
+            selected = currentRoute?.startsWith("trip_management") == true,
+            onClick = {
+                // Construct the route dynamically with the ID
                 val route = if (circleId != null) "trip_management/$circleId" else "trip_management/0"
-                navigateToScreen(navController, route) 
+                navigateToScreen(navController, route)
             },
             colors = NavigationBarItemDefaults.colors(
                 selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,

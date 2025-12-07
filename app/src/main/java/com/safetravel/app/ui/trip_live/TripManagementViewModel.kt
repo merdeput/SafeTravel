@@ -199,8 +199,7 @@ class TripManagementViewModel @Inject constructor(
 
             val allTrips = tripsResult.getOrThrow()
             val activeTrip = allTrips.find { 
-                //it.circleId == resolvedCircleId &&
-                (it.endDate == null || it.endDate == SPECIAL_END_DATE)
+                it.circleId == resolvedCircleId && (it.endDate == null || it.endDate == SPECIAL_END_DATE)
             }
 
             if (activeTrip == null) {

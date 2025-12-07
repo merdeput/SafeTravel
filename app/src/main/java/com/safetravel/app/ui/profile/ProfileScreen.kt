@@ -25,6 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,11 +35,15 @@ fun ProfileScreen(
     onManageContacts: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToSosAlerts: () -> Unit,
-    onNavigateToInTrip: (Int) -> Unit
+    onNavigateToInTrip: (Int) -> Unit,
+    onNavigateToTripHistory: (Int) -> Unit // Added missing parameter
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var showDeleteDialog by remember { mutableStateOf(false) }
     var tripToDelete by remember { mutableStateOf<Trip?>(null) }
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
     if (showDeleteDialog && tripToDelete != null) {
         DeleteConfirmationDialog(
@@ -56,6 +61,7 @@ fun ProfileScreen(
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text("SafeTravel", fontWeight = FontWeight.Bold) },
@@ -71,7 +77,15 @@ fun ProfileScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = onCreateTrip,
+                onClick = {
+                    if (uiState.currentTrip != null) {
+                        scope.launch {
+                            snackbarHostState.showSnackbar("There is an on-going trip, end trip or delete it to create a new trip")
+                        }
+                    } else {
+                        onCreateTrip()
+                    }
+                },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary
             ) {
@@ -127,7 +141,7 @@ fun ProfileScreen(
                         TripItem(
                             trip = trip,
                             isCurrent = false,
-                            onClick = { /* TODO: Navigate to trip history */ },
+                            onClick = { onNavigateToTripHistory(trip.id) }, // Updated to navigate
                             onDelete = {
                                 tripToDelete = trip
                                 showDeleteDialog = true

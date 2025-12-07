@@ -28,7 +28,7 @@ import com.safetravel.app.ui.profile.SettingsScreen
 import com.safetravel.app.ui.sos.AiHelpScreen
 import com.safetravel.app.ui.sos.SosAlertsScreen
 import com.safetravel.app.ui.theme.BeeTheme
-import com.safetravel.app.ui.trip_live.TripManagementScreen
+import com.safetravel.app.ui.triphistory.TripHistoryScreen
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -72,8 +72,18 @@ fun AppNavigation() {
                 onNavigateToSosAlerts = { navController.navigate("sos_alerts") },
                 onNavigateToInTrip = { circleId -> 
                     navController.navigate("main/$circleId") 
+                },
+                onNavigateToTripHistory = { tripId ->
+                    navController.navigate("trip_history/$tripId")
                 }
             )
+        }
+
+        composable(
+            route = "trip_history/{tripId}",
+            arguments = listOf(navArgument("tripId") { type = NavType.IntType })
+        ) {
+            TripHistoryScreen(onNavigateUp = { navController.popBackStack() })
         }
 
         composable("settings") {
@@ -117,7 +127,6 @@ fun AppNavigation() {
             
             LaunchedEffect(uiState.createdCircleId) {
                 uiState.createdCircleId?.let { circleId ->
-                    // This pops the create_trip screen from the back stack before navigating
                     navController.navigate("main/$circleId") { 
                         popUpTo("create_trip") { inclusive = true } 
                     }
@@ -147,10 +156,6 @@ fun AppNavigation() {
             arguments = listOf(navArgument("circleId") { type = NavType.IntType })
         ) {
             MainScreen(navController = navController)
-        }
-
-        composable("trip_management") {
-            // This screen is now hosted inside MainScreen's NavHost
         }
     }
 }
