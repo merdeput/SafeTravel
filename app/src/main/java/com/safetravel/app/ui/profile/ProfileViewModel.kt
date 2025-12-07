@@ -3,10 +3,13 @@ package com.safetravel.app.ui.profile
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.safetravel.app.data.model.SPECIAL_END_DATE
 import com.safetravel.app.data.model.TripDTO
 import com.safetravel.app.data.repository.AuthRepository
+import com.safetravel.app.data.repository.CircleRepository
 import com.safetravel.app.data.repository.TripRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -18,11 +21,14 @@ import javax.inject.Inject
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
     private val authRepository: AuthRepository,
-    private val tripRepository: TripRepository
+    private val tripRepository: TripRepository,
+    private val circleRepository: CircleRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProfileUiState())
     val uiState = _uiState.asStateFlow()
+    
+    private val currentUserId: Int? = authRepository.currentUser?.id
 
     init {
         val user = authRepository.currentUser
@@ -32,93 +38,115 @@ class ProfileViewModel @Inject constructor(
             it.copy(userName = displayName)
         }
         
-        if (user != null && user.id != null) {
-            fetchTrips(user.id)
+        if (currentUserId != null) {
+            fetchData(currentUserId)
         }
     }
 
-    private fun fetchTrips(userId: Int) {
+    private fun fetchData(userId: Int) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             
-            val result = tripRepository.getTripsByUser(userId)
+            val tripsDeferred = async { tripRepository.getTripsByUser(userId) }
+            val circlesDeferred = async { circleRepository.getCircles() }
             
-            result.onSuccess { tripsDto ->
-                processTrips(tripsDto)
-            }.onFailure { error ->
-                Log.e("ProfileViewModel", "Error fetching trips", error)
+            val tripsResult = tripsDeferred.await()
+            val circlesResult = circlesDeferred.await()
+            
+            if (tripsResult.isSuccess) {
+                val tripsDto = tripsResult.getOrThrow()
+                val circles = circlesResult.getOrDefault(emptyList())
+                processTrips(tripsDto, circles)
+            } else {
+                val error = tripsResult.exceptionOrNull()
+                Log.e("ProfileViewModel", "Error fetching data", error)
                 _uiState.update { 
                     it.copy(
                         isLoading = false,
-                        error = "Failed to load trips: ${error.message}"
+                        error = "Failed to load data: ${error?.message}"
                     ) 
                 }
             }
         }
     }
     
-    private fun processTrips(tripsDto: List<TripDTO>) {
+    fun deleteTrip(tripId: Int) {
+        viewModelScope.launch {
+            val result = tripRepository.deleteTrip(tripId)
+            if (result.isSuccess) {
+                // Refresh the list after deletion
+                if (currentUserId != null) {
+                    fetchData(currentUserId)
+                }
+            } else {
+                val error = result.exceptionOrNull()
+                 _uiState.update { 
+                    it.copy(error = "Failed to delete trip: ${error?.message}") 
+                }
+            }
+        }
+    }
+    
+    private fun processTrips(tripsDto: List<TripDTO>, circles: List<com.safetravel.app.data.model.CircleResponse>) {
         try {
-            // ISO 8601 format often comes as yyyy-MM-ddTHH:mm:ss or similar.
-            // If strictly dates, maybe yyyy-MM-dd.
-            // Adjust formatter if needed. Python's datetime usually serializes to ISO format.
             val now = LocalDateTime.now()
             
             val mappedTrips = tripsDto.map { dto ->
-                // Try parsing. If it fails, might need a specific formatter.
-                // Assuming standard ISO 8601 for now.
-                // If the string is just "yyyy-MM-dd", LocalDateTime.parse might fail without time.
-                // Let's try to be robust or assume a format.
-                // Given python datetime, it usually includes T.
-                
-                val start = try {
-                    LocalDateTime.parse(dto.startDate, DateTimeFormatter.ISO_DATE_TIME)
-                } catch (e: Exception) {
+                val endStr = dto.endDate
+                val end = if (endStr != null && endStr != SPECIAL_END_DATE) {
                     try {
-                        // Fallback for date only or other formats if necessary
-                         LocalDateTime.parse(dto.startDate) // Default parser
-                    } catch (e2: Exception) {
-                        now // Fallback/Error handling
+                        LocalDateTime.parse(endStr, DateTimeFormatter.ISO_DATE_TIME)
+                    } catch (e: Exception) {
+                         try {
+                             LocalDateTime.parse(endStr)
+                        } catch (e2: Exception) {
+                            null
+                        }
+                    }
+                } else {
+                    null 
+                }
+                
+                val status = if (end == null) {
+                    TripStatus.ONGOING
+                } else if (now.isAfter(end)) {
+                    TripStatus.COMPLETED
+                } else {
+                    TripStatus.COMPLETED
+                }
+                
+                var resolvedCircleId = dto.circleId
+                if (resolvedCircleId == null && status == TripStatus.ONGOING) {
+                    val nameMatch = circles.find { 
+                        it.circleName.equals("Trip to ${dto.destination}", ignoreCase = true) 
+                    }
+                    if (nameMatch != null) {
+                        resolvedCircleId = nameMatch.id
+                    } else {
+                        resolvedCircleId = circles.maxByOrNull { it.id }?.id
                     }
                 }
-                
-                val end = try {
-                    LocalDateTime.parse(dto.endDate, DateTimeFormatter.ISO_DATE_TIME)
-                } catch (e: Exception) {
-                     try {
-                         LocalDateTime.parse(dto.endDate)
-                    } catch (e2: Exception) {
-                        now
-                    }
-                }
-                
-                val status = when {
-                    now.isBefore(start) -> TripStatus.UPCOMING
-                    now.isAfter(end) -> TripStatus.COMPLETED
-                    else -> TripStatus.ONGOING
-                }
-                
+
                 Trip(
                     id = dto.id,
                     destination = dto.destination,
-                    startDate = dto.startDate, // Keep original string for display? Or format it?
-                    endDate = dto.endDate,
-                    status = status
+                    startDate = dto.startDate, 
+                    endDate = if (endStr == SPECIAL_END_DATE) null else endStr, 
+                    status = status,
+                    circleId = resolvedCircleId
                 )
             }
             
-            // "trip that is happening"
             val current = mappedTrips.firstOrNull { it.status == TripStatus.ONGOING }
-            
-            // "trips that have been through"
             val past = mappedTrips.filter { it.status == TripStatus.COMPLETED }
-                .sortedByDescending { it.endDate } // Most recent past trip first
+                .sortedByDescending { it.endDate } 
 
             _uiState.update { 
                 it.copy(
                     isLoading = false,
                     currentTrip = current,
-                    pastTrips = past
+                    pastTrips = past,
+                    error = null // Clear previous errors on success
                 ) 
             }
             

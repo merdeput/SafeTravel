@@ -18,12 +18,12 @@ import com.safetravel.app.ui.profile.AddMembersDialog
 @Composable
 fun TripManagementScreen(
     viewModel: TripManagementViewModel = hiltViewModel(),
-    onEndTrip: () -> Unit
+    onEndTrip: () -> Unit,
+    onNavigateToProfile: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var showAddMembersDialog by remember { mutableStateOf(false) }
 
-    // Handle trip ended navigation
     LaunchedEffect(uiState.tripEnded) {
         if (uiState.tripEnded) {
             onEndTrip()
@@ -118,19 +118,22 @@ fun TripManagementScreen(
                                 ) {
                                     val displayName = member.fullName ?: member.username ?: "User ID: ${member.id}"
                                     Text(displayName, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-                                    IconButton(onClick = { viewModel.removeMemberFromCircle(member.id.toString()) }) {
-                                        Icon(
-                                            Icons.Default.Close, 
-                                            contentDescription = "Remove Member",
-                                            tint = MaterialTheme.colorScheme.error
-                                        )
+                                    
+                                    // Hide delete button for the current user
+                                    if (member.id != uiState.currentUserId) {
+                                        IconButton(onClick = { viewModel.removeMemberFromCircle(member.id.toString()) }) {
+                                            Icon(
+                                                Icons.Default.Close, 
+                                                contentDescription = "Remove Member",
+                                                tint = MaterialTheme.colorScheme.error
+                                            )
+                                        }
                                     }
                                 }
                             }
                         }
                     }
                 } ?: run {
-                     // If no circle data yet
                      if (!uiState.isLoading) {
                          Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
                              Text("No trip information available.", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -141,6 +144,15 @@ fun TripManagementScreen(
                 }
                 
                 Spacer(modifier = Modifier.height(16.dp))
+
+                OutlinedButton(
+                    onClick = onNavigateToProfile,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Back to Profile")
+                }
+                
+                Spacer(modifier = Modifier.height(8.dp))
 
                 Button(
                     onClick = { viewModel.endTrip() },

@@ -2,6 +2,7 @@ package com.safetravel.app.ui.createtrip
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.safetravel.app.data.model.SPECIAL_END_DATE
 import com.safetravel.app.data.model.TripBase
 import com.safetravel.app.data.repository.AuthRepository
 import com.safetravel.app.data.repository.CircleRepository
@@ -26,7 +27,7 @@ data class CreateTripUiState(
     val isGenerating: Boolean = false,
     val generatedReport: String? = null,
     val isCreatingTrip: Boolean = false,
-    val createdCircleId: Int? = null, // Restored for navigation in MainActivity
+    val createdCircleId: Int? = null,
     val error: String? = null
 )
 
@@ -114,15 +115,15 @@ class CreateTripViewModel @Inject constructor(
             val circleId = circleResult.getOrThrow().id
 
             // 2. Prepare Trip Data
-            val (startDate, endDate) = calculateDates(_uiState.value.time, _uiState.value.duration)
+            val startDate = calculateStartDate(_uiState.value.time)
             
             val tripBase = TripBase(
                 userId = currentUser.id,
                 tripName = "Trip to ${_uiState.value.where}",
                 destination = _uiState.value.where,
                 startDate = startDate,
-                endDate = endDate,
-                tripType = _uiState.value.tripType.ifBlank { "Leisure" }, // Default
+                endDate = SPECIAL_END_DATE, // Use special date for ongoing trips
+                tripType = _uiState.value.tripType.ifBlank { "Leisure" },
                 haveElderly = _uiState.value.hasElderly,
                 haveChildren = _uiState.value.hasChildren,
                 circleId = circleId,
@@ -140,7 +141,7 @@ class CreateTripViewModel @Inject constructor(
         }
     }
     
-    private fun calculateDates(dateStr: String, durationStr: String): Pair<String, String> {
+    private fun calculateStartDate(dateStr: String): String {
         val formatter = DateTimeFormatter.ofPattern("MM/dd/yyyy")
         val isoFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
         
@@ -149,19 +150,8 @@ class CreateTripViewModel @Inject constructor(
         } catch (e: Exception) {
             LocalDate.now().atStartOfDay()
         }
-
-        val daysToAdd = when {
-            durationStr.contains("1-2 days") -> 2L
-            durationStr.contains("3-4 days") -> 4L
-            durationStr.contains("1 week") -> 7L
-            durationStr.contains("2 weeks") -> 14L
-            durationStr.contains("1 month") -> 30L
-            else -> 1L // Default
-        }
         
-        val end = start.plusDays(daysToAdd)
-        
-        return Pair(start.format(isoFormatter), end.format(isoFormatter))
+        return start.format(isoFormatter)
     }
     
     fun onTripCreationNavigated() {

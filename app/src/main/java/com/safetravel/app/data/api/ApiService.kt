@@ -209,6 +209,13 @@ interface ApiService {
     ): Response<Unit>
 
     // --- TRIP ENDPOINTS ---
+    
+    // Note: Python router provided earlier had "/trips/", but based on other endpoints they likely need "/api/" prefix.
+    // If the python router was mounted with "/api" prefix, then it's "/api/trips/...".
+    // I'll assume "/api/" prefix for consistency with other endpoints like "/api/circles".
+    // Wait, the user provided python code: `@router.get("/trips/{trip_id}", ...)`
+    // And `app.include_router(trip_router, prefix="/api", tags=["Trips"])` is usually how it's done.
+    // So "api/trips" is likely correct.
 
     @GET("api/trips/{trip_id}")
     suspend fun getTripById(

@@ -28,8 +28,9 @@ data class Trip(
     val id: Int,
     val destination: String,
     val startDate: String,
-    val endDate: String,
-    val status: TripStatus
+    val endDate: String?,
+    val status: TripStatus,
+    val circleId: Int? // Added to link navigation
 )
 
 enum class TripStatus {

@@ -33,7 +33,6 @@ import com.safetravel.app.ui.trip_live.TripManagementScreen
 // Screen routes for the main dashboard
 sealed class Screen(val route: String, val title: String) {
     object InTrip : Screen("in_trip", "In Trip")
-    // Changed route definition to include the parameter
     object TripManagement : Screen("trip_management/{circleId}", "Trip Mgmt") 
     object AccidentDetection : Screen("accident", "Accident Detection")
     object Sensors : Screen("sensors", "Sensors")
@@ -47,8 +46,6 @@ fun MainScreen(navController: NavHostController) { // Pass NavController from pa
     val navBackStackEntry by bottomNavController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     
-
-    // Define permissions to request
     val permissionsToRequest = remember {
         mutableListOf(
             Manifest.permission.ACCESS_COARSE_LOCATION,
@@ -62,15 +59,12 @@ fun MainScreen(navController: NavHostController) { // Pass NavController from pa
 
     val permissionState = rememberMultiplePermissionsState(permissionsToRequest)
 
-    // Request permissions on launch
     LaunchedEffect(Unit) {
         if (!permissionState.allPermissionsGranted) {
             permissionState.launchMultiplePermissionRequest()
         }
     }
 
-    // Start Background Service ONLY when Location permission is granted
-    // (Required for FOREGROUND_SERVICE_LOCATION on Android 14+)
     val isLocationGranted = permissionState.permissions.any { 
         (it.permission == Manifest.permission.ACCESS_FINE_LOCATION || 
          it.permission == Manifest.permission.ACCESS_COARSE_LOCATION) && 
@@ -95,25 +89,23 @@ fun MainScreen(navController: NavHostController) { // Pass NavController from pa
     ) { paddingValues ->
         NavHost(
             navController = bottomNavController,
-            startDestination = Screen.InTrip.route, // Start at the InTrip screen
+            startDestination = Screen.InTrip.route, 
             modifier = Modifier.padding(paddingValues)
         ) {
             composable(Screen.InTrip.route) {
-                // Pass the main NavController to InTripScreen
                 InTripScreen(navController = navController)
             }
             
-            // TripManagement needs circleId. 
             composable(
                 route = "trip_management/{circleId}",
                 arguments = listOf(navArgument("circleId") { type = NavType.IntType })
             ) {
-                // The ViewModel will automatically get circleId from SavedStateHandle because it's in the arguments
                 TripManagementScreen(
                     onEndTrip = { 
-                        navController.navigate("profile") { 
-                            popUpTo(0) 
-                        }
+                        navController.navigate("profile") { popUpTo(0) } 
+                    },
+                    onNavigateToProfile = {
+                        navController.navigate("profile") { popUpTo("profile") { inclusive = true } }
                     }
                 )
             }
@@ -132,9 +124,8 @@ fun MainScreen(navController: NavHostController) { // Pass NavController from pa
 private fun AppBottomNavigation(
     navController: NavHostController, 
     currentRoute: String?,
-    parentNavController: NavHostController // Pass parent controller to retrieve ID
+    parentNavController: NavHostController
 ) {
-    // Retrieve the circleId from the PARENT navController's back stack entry
     val parentEntry = try {
         parentNavController.getBackStackEntry("main/{circleId}")
     } catch (e: Exception) { null }
@@ -173,10 +164,8 @@ private fun AppBottomNavigation(
         NavigationBarItem(
             icon = { Icon(Icons.Default.Group, contentDescription = "Trip Management") },
             label = { Text("Trip Mgmt") },
-            // Use startsWith because the route now has a parameter
             selected = currentRoute?.startsWith("trip_management") == true, 
             onClick = { 
-                // Construct the route dynamically with the ID
                 val route = if (circleId != null) "trip_management/$circleId" else "trip_management/0"
                 navigateToScreen(navController, route) 
             },

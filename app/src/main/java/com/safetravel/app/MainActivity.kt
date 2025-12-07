@@ -69,7 +69,10 @@ fun AppNavigation() {
                 onCreateTrip = { navController.navigate("create_trip") },
                 onManageContacts = { navController.navigate("contacts") },
                 onNavigateToSettings = { navController.navigate("settings") },
-                onNavigateToSosAlerts = { navController.navigate("sos_alerts") }
+                onNavigateToSosAlerts = { navController.navigate("sos_alerts") },
+                onNavigateToInTrip = { circleId -> 
+                    navController.navigate("main/$circleId") 
+                }
             )
         }
 
@@ -114,8 +117,9 @@ fun AppNavigation() {
             
             LaunchedEffect(uiState.createdCircleId) {
                 uiState.createdCircleId?.let { circleId ->
+                    // This pops the create_trip screen from the back stack before navigating
                     navController.navigate("main/$circleId") { 
-                        popUpTo("profile") { inclusive = true } 
+                        popUpTo("create_trip") { inclusive = true } 
                     }
                     createTripViewModel.onTripCreationNavigated()
                 }
@@ -146,7 +150,7 @@ fun AppNavigation() {
         }
 
         composable("trip_management") {
-            TripManagementScreen(onEndTrip = { navController.navigate("profile") { popUpTo(0) } })
+            // This screen is now hosted inside MainScreen's NavHost
         }
     }
 }
