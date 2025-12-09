@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
@@ -146,9 +147,15 @@ class CreateTripViewModel @Inject constructor(
         val isoFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
         
         val start = try {
-            LocalDate.parse(dateStr, formatter).atStartOfDay()
+            val date = LocalDate.parse(dateStr, formatter)
+            // Use current time if the date is today, otherwise use start of day
+            if (date.isEqual(LocalDate.now())) {
+                LocalDateTime.now()
+            } else {
+                date.atStartOfDay()
+            }
         } catch (e: Exception) {
-            LocalDate.now().atStartOfDay()
+            LocalDateTime.now()
         }
         
         return start.format(isoFormatter)

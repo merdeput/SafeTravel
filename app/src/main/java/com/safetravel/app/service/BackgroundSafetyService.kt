@@ -10,12 +10,18 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.os.Build
 import android.os.IBinder
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import androidx.core.app.NotificationCompat
 import com.safetravel.app.MainActivity
 import com.safetravel.app.R
+import com.safetravel.app.data.repository.AuthRepository
 import com.safetravel.app.data.repository.LocationService
 import com.safetravel.app.data.repository.SensorDataRepository
+import com.safetravel.app.data.repository.SosRepository
 import com.safetravel.app.ui.sos.detector.AccidentDetector
 import com.safetravel.app.ui.sos.detector.PaperFallDetector
 import com.safetravel.app.ui.sos.detector.VolumeSOSDetector
@@ -44,6 +50,12 @@ class BackgroundSafetyService : Service(), SensorEventListener {
     @Inject
     lateinit var sensorDataRepository: SensorDataRepository
 
+    @Inject
+    lateinit var sosRepository: SosRepository
+
+    @Inject
+    lateinit var authRepository: AuthRepository
+
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private lateinit var sensorManager: SensorManager
@@ -65,6 +77,9 @@ class BackgroundSafetyService : Service(), SensorEventListener {
     
     // Job for the alert countdown
     private var alertCountdownJob: Job? = null
+
+    // Constant vibration job
+    private var vibrationJob: Job? = null
 
     private data class SensorEventData(
         val sensorType: Int,
@@ -130,6 +145,10 @@ class BackgroundSafetyService : Service(), SensorEventListener {
     private fun resetDetectors() {
         accidentDetector.reset()
         paperFallDetector.reset()
+        
+        // Stop vibration immediately
+        stopVibration()
+
         // Cancel any pending alert countdown
         alertCountdownJob?.cancel()
         alertCountdownJob = null
@@ -166,7 +185,51 @@ class BackgroundSafetyService : Service(), SensorEventListener {
         startForeground(1, notification)
     }
     
+    private fun startConstantVibration() {
+        vibrationJob?.cancel() // Cancel any existing job
+        vibrationJob = serviceScope.launch {
+            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+                vibratorManager.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+            }
+
+            if (vibrator.hasVibrator()) {
+                while (true) { // Loop indefinitely until cancelled
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        // Vibrate for 1 second
+                        vibrator.vibrate(VibrationEffect.createOneShot(1000, VibrationEffect.DEFAULT_AMPLITUDE))
+                    } else {
+                        @Suppress("DEPRECATION")
+                        vibrator.vibrate(1000)
+                    }
+                    // Wait for 1 second vibrate + 0.5 second pause
+                    delay(1500) 
+                }
+            }
+        }
+    }
+
+    private fun stopVibration() {
+        vibrationJob?.cancel()
+        vibrationJob = null
+        
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            vibratorManager.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        }
+        vibrator.cancel()
+    }
+
     private fun showAccidentAlertNotification() {
+        // Start constant vibration
+        startConstantVibration()
+
         val channelId = "safety_alert_channel"
         val channelName = "Emergency Alerts"
         val notificationManager = getSystemService(NotificationManager::class.java)
@@ -185,7 +248,7 @@ class BackgroundSafetyService : Service(), SensorEventListener {
         val notification = NotificationCompat.Builder(this, channelId)
             .setContentTitle("ACCIDENT DETECTED")
             .setContentText("Sending help in 30 seconds. Tap to cancel.")
-            .setSmallIcon(R.mipmap.ic_launcher) // Changed to mipmap to avoid resource error
+            .setSmallIcon(R.mipmap.ic_launcher)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
@@ -194,19 +257,45 @@ class BackgroundSafetyService : Service(), SensorEventListener {
         notificationManager.notify(2, notification)
         
         // Start countdown to send alert
-        startAlertCountdown()
+        startAlertCountdown("Vehicle accident detected")
     }
     
-    private fun startAlertCountdown() {
+    private fun startAlertCountdown(message: String) {
         alertCountdownJob?.cancel()
         alertCountdownJob = serviceScope.launch {
             delay(30000) // 30 seconds delay
+            
+            // Stop vibration before sending alert (or keep it going until user dismisses?)
+            // Usually we stop it when the action is taken or dismissed. 
+            // For now, let's keep it until 'resetDetectors' or 'showAlertSentNotification' stops it.
+            stopVibration() 
+
+            val location = locationService.getCurrentLocation()
+            val user = authRepository.currentUser
+            val userId = user?.id
+
+            if (user != null && location != null && userId != null) {
+                try {
+                    sosRepository.sendSos(
+                        userId = userId,
+                        circleId = null,
+                        message = message,
+                        lat = location.latitude,
+                        lng = location.longitude
+                    )
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+            
             showAlertSentNotification()
-            // Here you would also trigger the actual API call or SMS
         }
     }
 
     private fun showFallAlertNotification() {
+        // Start constant vibration
+        startConstantVibration()
+
         val channelId = "safety_alert_channel"
         val channelName = "Emergency Alerts"
         val notificationManager = getSystemService(NotificationManager::class.java)
@@ -224,7 +313,7 @@ class BackgroundSafetyService : Service(), SensorEventListener {
 
         val notification = NotificationCompat.Builder(this, channelId)
             .setContentTitle("FALL DETECTED")
-            .setContentText("A fall was detected. Tap if you are okay.")
+            .setContentText("A fall was detected. Sending help in 30 seconds. Tap if you are okay.")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
@@ -233,9 +322,14 @@ class BackgroundSafetyService : Service(), SensorEventListener {
             .build()
 
         notificationManager.notify(3, notification)
+
+        startAlertCountdown("Fall detected")
     }
 
     private fun showAlertSentNotification() {
+        // Ensure vibration is stopped when the alert is finally sent
+        stopVibration()
+
         val channelId = "safety_alert_channel"
         val channelName = "Emergency Alerts"
         val notificationManager = getSystemService(NotificationManager::class.java)
