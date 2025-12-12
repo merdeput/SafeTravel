@@ -109,12 +109,12 @@ fun SosAlertsScreen(
     onNavigateUp: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    var selectedTab by remember { mutableStateOf(0) } // 0 for SOS, 1 for Notifications
+    var selectedTab by remember { mutableStateOf(1) } // Default to 1 (Notifications)
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Alerts & Notifications") },
+                title = { Text("Notifications") }, // Changed title to Notifications
                 navigationIcon = { IconButton(onClick = onNavigateUp) { Icon(Icons.Default.ArrowBack, contentDescription = "Back") } }
             )
         },

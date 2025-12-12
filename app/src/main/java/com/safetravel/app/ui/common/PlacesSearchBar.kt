@@ -7,11 +7,15 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.google.android.gms.maps.model.LatLng
@@ -47,47 +51,93 @@ fun PlacesSearchBar(
 
     val token = remember { AutocompleteSessionToken.newInstance() }
 
-    Column(modifier = modifier) {
+    Column(
+        modifier = modifier
+            .padding(16.dp) // Add outer padding
+            .fillMaxWidth()
+    ) {
         // Search TextField
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = { query ->
-                searchQuery = query
-                if (query.length >= 3) {
-                    showPredictions = true
-                    scope.launch {
-                        searchPlaces(placesClient, query, token) { results ->
-                            predictions = results
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .shadow(elevation = 4.dp, shape = RoundedCornerShape(24.dp)),
+            shape = RoundedCornerShape(24.dp), // Fully rounded corners
+            color = MaterialTheme.colorScheme.surface
+        ) {
+            TextField(
+                value = searchQuery,
+                onValueChange = { query ->
+                    searchQuery = query
+                    if (query.length >= 3) {
+                        showPredictions = true
+                        scope.launch {
+                            searchPlaces(placesClient, query, token) { results ->
+                                predictions = results
+                            }
                         }
+                    } else {
+                        predictions = emptyList()
+                        showPredictions = false
                     }
-                } else {
-                    predictions = emptyList()
-                    showPredictions = false
-                }
-            },
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Search for a place...") },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
-            singleLine = true,
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surface,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp), // Fixed smaller height
+                placeholder = { 
+                    Text(
+                        "Search places", 
+                        style = MaterialTheme.typography.bodyMedium
+                    ) 
+                },
+                leadingIcon = { 
+                    Icon(
+                        Icons.Default.Search, 
+                        contentDescription = "Search",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    ) 
+                },
+                singleLine = true,
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                    disabledContainerColor = Color.Transparent,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                ),
+                textStyle = MaterialTheme.typography.bodyMedium
             )
-        )
+        }
 
         // Predictions list
         if (showPredictions && predictions.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(8.dp))
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 300.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                    .heightIn(max = 250.dp) // Limit height
+                    .padding(horizontal = 4.dp), // Slight indent
+                shape = RoundedCornerShape(16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 LazyColumn {
                     items(predictions) { prediction ->
                         ListItem(
-                            headlineContent = { Text(prediction.primaryText) },
-                            supportingContent = { Text(prediction.secondaryText) },
+                            headlineContent = { 
+                                Text(
+                                    prediction.primaryText, 
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 1
+                                ) 
+                            },
+                            supportingContent = { 
+                                Text(
+                                    prediction.secondaryText, 
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 1,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                ) 
+                            },
                             modifier = Modifier.clickable {
                                 isSearching = true
                                 scope.launch {
@@ -107,14 +157,21 @@ fun PlacesSearchBar(
                                 }
                             }
                         )
-                        HorizontalDivider()
+                        if (prediction != predictions.last()) {
+                            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                        }
                     }
                 }
             }
         }
 
         if (isSearching) {
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            LinearProgressIndicator(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp)
+                    .clip(RoundedCornerShape(4.dp))
+            )
         }
     }
 }

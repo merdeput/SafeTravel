@@ -21,12 +21,11 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
 
 @Composable
 fun SosButton(
     modifier: Modifier = Modifier,
-    viewModel: SosButtonViewModel = hiltViewModel()
+    viewModel: SosButtonViewModel // Hoisted from MainAppScreen
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -51,6 +50,7 @@ fun SosButton(
                 )
             }
             is SosState.NavigateToAiHelp -> {
+                // The button becomes effectively invisible while in this state
                 Spacer(modifier = Modifier.size(100.dp))
             }
         }
@@ -131,15 +131,6 @@ private fun SosActivationButton(
                     )
                 }
             }
-        }
-        
-        if (sosState is SosState.Idle) {
-            Text(
-                text = "Hold to Activate",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.align(Alignment.BottomCenter).offset(y = 80.dp)
-            )
         }
     }
 }

@@ -14,6 +14,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -25,6 +26,7 @@ import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.safetravel.app.service.BackgroundSafetyService
+import com.safetravel.app.ui.common.SosButtonViewModel
 import com.safetravel.app.ui.debug.SensorsScreen
 import com.safetravel.app.ui.sos.AccidentDetectionScreen
 import com.safetravel.app.ui.trip_live.InTripScreen
@@ -102,7 +104,8 @@ fun MainScreen(navController: NavHostController) { // Pass NavController from pa
         ) {
             composable(Screen.InTrip.route) {
                 // Pass the main NavController to InTripScreen
-                InTripScreen(navController = navController)
+                val sosViewModel: SosButtonViewModel = hiltViewModel()
+                InTripScreen(navController = navController, sosViewModel = sosViewModel)
             }
 
             composable(

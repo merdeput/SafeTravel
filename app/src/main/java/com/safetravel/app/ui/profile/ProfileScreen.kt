@@ -2,25 +2,21 @@ package com.safetravel.app.ui.profile
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowForward
-import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -36,7 +32,7 @@ fun ProfileScreen(
     onNavigateToSettings: () -> Unit,
     onNavigateToSosAlerts: () -> Unit,
     onNavigateToInTrip: (Int) -> Unit,
-    onNavigateToTripHistory: (Int) -> Unit // Added missing parameter
+    onNavigateToTripHistory: (Int) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -61,37 +57,7 @@ fun ProfileScreen(
     }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text("SafeTravel", fontWeight = FontWeight.Bold) },
-                actions = {
-                    IconButton(onClick = onNavigateToSettings) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings")
-                    }
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    if (uiState.currentTrip != null) {
-                        scope.launch {
-                            snackbarHostState.showSnackbar("There is an on-going trip, end trip or delete it to create a new trip")
-                        }
-                    } else {
-                        onCreateTrip()
-                    }
-                },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Create New Trip")
-            }
-        }
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { paddingValues ->
         LazyColumn(
             modifier = Modifier
@@ -102,46 +68,56 @@ fun ProfileScreen(
         ) {
             item { ProfileHeader(userName = uiState.userName) }
 
+            // Settings Item in the list
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                Card(
+                    onClick = onNavigateToSettings,
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
                 ) {
-                    QuickActionCard(Icons.Default.Warning, "SOS Alerts", onNavigateToSosAlerts, MaterialTheme.colorScheme.error, Modifier.weight(1f))
-                    QuickActionCard(Icons.Default.Contacts, "Contacts", onManageContacts, MaterialTheme.colorScheme.primary, Modifier.weight(1f))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Settings, contentDescription = null)
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text("Settings", style = MaterialTheme.typography.titleMedium)
+                        Spacer(modifier = Modifier.weight(1f))
+                        Icon(Icons.Default.ArrowForward, contentDescription = null)
+                    }
                 }
             }
 
             if (uiState.isLoading) {
                 item { Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
             } else {
-                if (uiState.currentTrip != null) {
-                    item { Text("Current Trip", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
-                    item {
-                        TripItem(
-                            trip = uiState.currentTrip!!,
-                            isCurrent = true,
-                            onClick = {
-                                val navigationId = uiState.currentTrip!!.circleId ?: uiState.currentTrip!!.id
-                                onNavigateToInTrip(navigationId)
-                            },
-                            onDelete = {
-                                tripToDelete = uiState.currentTrip
-                                showDeleteDialog = true
-                            }
+                
+                // Past Trips Section
+                item { 
+                    Text(
+                        "Trip History", 
+                        style = MaterialTheme.typography.titleLarge, 
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 8.dp)
+                    ) 
+                }
+                
+                if (uiState.pastTrips.isEmpty()) {
+                     item {
+                        Text(
+                            "No past trips found.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Center
                         )
                     }
-                } else if (uiState.pastTrips.isEmpty()) {
-                    item { EmptyTripsState() }
-                }
-
-                if (uiState.pastTrips.isNotEmpty()) {
-                    item { Text("Past Trips", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+                } else {
                     items(uiState.pastTrips) { trip ->
                         TripItem(
                             trip = trip,
-                            isCurrent = false,
-                            onClick = { onNavigateToTripHistory(trip.id) }, // Updated to navigate
+                            onClick = { onNavigateToTripHistory(trip.id) },
                             onDelete = {
                                 tripToDelete = trip
                                 showDeleteDialog = true
@@ -153,6 +129,11 @@ fun ProfileScreen(
 
             if (uiState.error != null) {
                 item { Text(uiState.error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+            }
+
+            // Spacer to lift content above the Global SOS Button
+            item {
+                Spacer(modifier = Modifier.height(90.dp))
             }
         }
     }
@@ -195,43 +176,18 @@ private fun ProfileHeader(userName: String) {
     }
 }
 
-@Composable
-private fun QuickActionCard(icon: ImageVector, label: String, onClick: () -> Unit, color: Color, modifier: Modifier = Modifier) {
-    Card(onClick = onClick, modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)), shape = MaterialTheme.shapes.medium) {
-        Column(modifier = Modifier.padding(16.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            Icon(imageVector = icon, contentDescription = null, tint = color, modifier = Modifier.size(32.dp))
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-        }
-    }
-}
-
-@Composable
-private fun EmptyTripsState() {
-    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
-        Column(modifier = Modifier.padding(32.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("No trips planned", style = MaterialTheme.typography.titleMedium)
-            Spacer(modifier = Modifier.height(8.dp))
-            Text("Create a new trip to get started with safety monitoring.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
-        }
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TripItem(trip: Trip, isCurrent: Boolean, onClick: () -> Unit, onDelete: () -> Unit) {
-    val containerColor = if (isCurrent) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
-    val contentColor = if (isCurrent) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
-
+private fun TripItem(trip: Trip, onClick: () -> Unit, onDelete: () -> Unit) {
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (isCurrent) 4.dp else 2.dp),
-        colors = CardDefaults.cardColors(containerColor = containerColor)
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(trip.destination, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = contentColor)
+                Text(trip.destination, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(4.dp))
                 val dateText = try {
                     if (trip.endDate != null) {
@@ -240,12 +196,12 @@ private fun TripItem(trip: Trip, isCurrent: Boolean, onClick: () -> Unit, onDele
                         "Started: ${trip.startDate.split("T")[0]}"
                     }
                 } catch (e: Exception) { trip.startDate }
-                Text(dateText, style = MaterialTheme.typography.bodySmall, color = contentColor.copy(alpha = 0.8f))
+                Text(dateText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             IconButton(onClick = onDelete) {
                 Icon(Icons.Default.Delete, contentDescription = "Delete Trip", tint = MaterialTheme.colorScheme.error)
             }
-            Icon(Icons.Default.ArrowForward, contentDescription = "Details", tint = contentColor)
+            Icon(Icons.Default.ArrowForward, contentDescription = "Details")
         }
     }
 }

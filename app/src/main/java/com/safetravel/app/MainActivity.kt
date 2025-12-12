@@ -16,19 +16,18 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import dagger.hilt.android.AndroidEntryPoint
+import com.safetravel.app.ui.MainAppScreen
 import com.safetravel.app.ui.createtrip.CreateTripScreen
 import com.safetravel.app.ui.createtrip.CreateTripViewModel
 import com.safetravel.app.ui.createtrip.LocationPickerScreen
-import com.safetravel.app.ui.home.MainScreen
 import com.safetravel.app.ui.login.LoginScreen
 import com.safetravel.app.ui.login.RegisterScreen
-import com.safetravel.app.ui.profile.ContactsScreen
-import com.safetravel.app.ui.profile.ProfileScreen
 import com.safetravel.app.ui.profile.SettingsScreen
 import com.safetravel.app.ui.sos.AiHelpScreen
 import com.safetravel.app.ui.sos.SosAlertsScreen
 import com.safetravel.app.ui.theme.BeeTheme
 import com.safetravel.app.ui.triphistory.TripHistoryScreen
+import com.safetravel.app.ui.trip_live.TripManagementScreen
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -48,11 +47,17 @@ class MainActivity : ComponentActivity() {
 fun AppNavigation() {
     val navController = rememberNavController()
 
+    // Start at Login (Auth Flow) - In a real app with persistence, we'd check token here
     NavHost(navController = navController, startDestination = "login") {
 
+        // --- Auth Flow ---
         composable("login") {
             LoginScreen(
-                onLoginSuccess = { navController.navigate("profile") { popUpTo("login") { inclusive = true } } },
+                onLoginSuccess = { 
+                    navController.navigate("main_app") { 
+                        popUpTo("login") { inclusive = true } 
+                    } 
+                },
                 onNavigateToRegister = { navController.navigate("register") }
             )
         }
@@ -64,17 +69,67 @@ fun AppNavigation() {
             )
         }
 
-        composable("profile") {
-            ProfileScreen(
-                onCreateTrip = { navController.navigate("create_trip") },
-                onManageContacts = { navController.navigate("contacts") },
-                onNavigateToSettings = { navController.navigate("settings") },
-                onNavigateToSosAlerts = { navController.navigate("sos_alerts") },
-                onNavigateToInTrip = { circleId -> 
-                    navController.navigate("main/$circleId") 
+        // --- Main App Flow (Bottom Navigation) ---
+        composable("main_app") {
+            MainAppScreen(rootNavController = navController)
+        }
+
+        // --- Full Screen Flows (Overlaying Bottom Bar) ---
+        
+        composable("create_trip") {
+            val createTripViewModel: CreateTripViewModel = hiltViewModel()
+            val backStackEntry = navController.currentBackStackEntry
+
+            LaunchedEffect(backStackEntry) {
+                val savedStateHandle = backStackEntry?.savedStateHandle
+                savedStateHandle?.get<String>("selected_location_name")?.let {
+                    createTripViewModel.onWhereChange(it)
+                    savedStateHandle.remove<String>("selected_location_name")
+                }
+            }
+            
+            val uiState by createTripViewModel.uiState.collectAsState()
+            
+            // Navigate to MainApp (Home/Map) when trip is created
+            LaunchedEffect(uiState.createdCircleId) {
+                uiState.createdCircleId?.let { circleId ->
+                    // Go back to main app, potentially clearing create_trip from stack
+                    navController.navigate("main_app") {
+                        popUpTo("create_trip") { inclusive = true }
+                    }
+                    createTripViewModel.onTripCreationNavigated()
+                }
+            }
+
+            CreateTripScreen(
+                viewModel = createTripViewModel,
+                onStartTrip = { createTripViewModel.onStartTripClick() },
+                onNavigateToLocationPicker = { navController.navigate("location_picker") }
+            )
+        }
+
+        composable("location_picker") {
+            LocationPickerScreen(
+                onLocationSelected = {
+                    navController.previousBackStackEntry?.savedStateHandle?.set("selected_location_name", it)
+                    navController.popBackStack()
                 },
-                onNavigateToTripHistory = { tripId ->
-                    navController.navigate("trip_history/$tripId")
+                onNavigateUp = { navController.popBackStack() }
+            )
+        }
+        
+        composable(
+            route = "trip_management/{tripId}",
+            arguments = listOf(navArgument("tripId") { type = NavType.IntType })
+        ) {
+            TripManagementScreen(
+                onEndTrip = {
+                    navController.navigate("main_app") { popUpTo("main_app") { inclusive = true } }
+                },
+                onNavigateToProfile = {
+                    // Just pop back, or navigate to main_app -> profile?
+                    // Pop back usually works if we came from Home
+                    navController.popBackStack()
                 }
             )
         }
@@ -95,67 +150,23 @@ fun AppNavigation() {
             )
         }
 
-        composable("contacts") {
-            ContactsScreen(onNavigateUp = { navController.popBackStack() })
+        // Use SosAlertsScreen for "notifications" route as requested
+        composable("notifications") {
+            SosAlertsScreen(
+                onNavigateUp = { navController.popBackStack() }
+            )
         }
 
         composable("sos_alerts") {
             SosAlertsScreen(onNavigateUp = { navController.popBackStack() })
         }
 
-        composable("create_trip") {
-            val createTripViewModel: CreateTripViewModel = hiltViewModel()
-            val backStackEntry = navController.currentBackStackEntry
-
-            LaunchedEffect(backStackEntry) {
-                val savedStateHandle = backStackEntry?.savedStateHandle
-                savedStateHandle?.get<String>("selected_location_name")?.let {
-                    createTripViewModel.onWhereChange(it)
-                    savedStateHandle.remove<String>("selected_location_name")
-                }
-            }
-
-            CreateTripScreen(
-                viewModel = createTripViewModel,
-                onStartTrip = { 
-                    createTripViewModel.onStartTripClick() 
-                },
-                onNavigateToLocationPicker = { navController.navigate("location_picker") }
-            )
-            
-            val uiState by createTripViewModel.uiState.collectAsState()
-            
-            LaunchedEffect(uiState.createdCircleId) {
-                uiState.createdCircleId?.let { circleId ->
-                    navController.navigate("main/$circleId") { 
-                        popUpTo("create_trip") { inclusive = true } 
-                    }
-                    createTripViewModel.onTripCreationNavigated()
-                }
-            }
-        }
-
-        composable("location_picker") {
-            LocationPickerScreen(
-                onLocationSelected = {
-                    navController.previousBackStackEntry?.savedStateHandle?.set("selected_location_name", it)
-                    navController.popBackStack()
-                },
-                onNavigateUp = { navController.popBackStack() }
-            )
-        }
-
         composable("ai_help") {
             AiHelpScreen(
-                onEmergencyStopped = { navController.popBackStack("main", inclusive = false) }
+                onEmergencyStopped = { 
+                    navController.popBackStack("main_app", inclusive = false) 
+                }
             )
-        }
-
-        composable(
-            route = "main/{circleId}",
-            arguments = listOf(navArgument("circleId") { type = NavType.IntType })
-        ) {
-            MainScreen(navController = navController)
         }
     }
 }

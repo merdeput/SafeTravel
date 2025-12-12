@@ -1,11 +1,21 @@
 package com.safetravel.app.ui.sos
 
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.LocalPolice
+import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 
@@ -32,6 +42,11 @@ fun AiHelpScreen(
                 .padding(paddingValues)
                 .fillMaxSize()
         ) {
+            // Quick Actions section
+            EmergencyUtilsSection()
+            
+            Divider(modifier = Modifier.padding(horizontal = 16.dp))
+
             // Chat messages take up the remaining space
             LazyColumn(
                 modifier = Modifier
@@ -78,6 +93,87 @@ fun AiHelpScreen(
             onConfirm = viewModel::onVerifyPasscode,
             onDismiss = { showStopDialog = false }
         )
+    }
+}
+
+@Composable
+private fun EmergencyUtilsSection() {
+    Column(modifier = Modifier.padding(16.dp)) {
+        Text(
+            "Quick Actions",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            EmergencyCallButton(
+                label = "Police",
+                phoneNumber = "113",
+                icon = Icons.Default.LocalPolice,
+                modifier = Modifier.weight(1f)
+            )
+            EmergencyCallButton(
+                label = "Ambulance",
+                phoneNumber = "115",
+                icon = Icons.Default.MedicalServices,
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EmergencyCallButton(
+    label: String,
+    phoneNumber: String,
+    icon: ImageVector,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val dialIntent = remember {
+        Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phoneNumber"))
+    }
+
+    Card(
+        onClick = {
+            try {
+                context.startActivity(dialIntent)
+            } catch (e: Exception) {
+                Toast.makeText(context, "Could not open dialer.", Toast.LENGTH_SHORT).show()
+            }
+        },
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+        shape = MaterialTheme.shapes.large
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = MaterialTheme.colorScheme.onErrorContainer,
+                modifier = Modifier.size(32.dp)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onErrorContainer
+            )
+            Text(
+                text = phoneNumber,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
+            )
+        }
     }
 }
 

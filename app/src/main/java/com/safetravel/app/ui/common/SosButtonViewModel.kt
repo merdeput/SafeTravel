@@ -133,25 +133,20 @@ class SosButtonViewModel @Inject constructor(
                  )
                  
                  if (result.isSuccess) {
-                     if (_uiState.value.sosState !is SosState.NavigateToAiHelp) {
-                         _uiState.update { it.copy(sosState = SosState.NavigateToAiHelp) }
-                     }
+                     // Success or failure, navigate to help screen
                  } else {
                      _uiState.update { it.copy(sendError = result.exceptionOrNull()?.message) }
-                      // Still navigate to help even if API fails, better safe than sorry
-                      if (_uiState.value.sosState !is SosState.NavigateToAiHelp) {
-                         _uiState.update { it.copy(sosState = SosState.NavigateToAiHelp) }
-                     }
                  }
              } else {
                   _uiState.update { it.copy(sendError = "User not authenticated") }
-                  // If not authenticated, we still probably want to navigate to AI help locally
-                  if (_uiState.value.sosState !is SosState.NavigateToAiHelp) {
-                       _uiState.update { it.copy(sosState = SosState.NavigateToAiHelp) }
-                  }
              }
              
-             _uiState.update { it.copy(isSending = false) }
+             _uiState.update { 
+                 it.copy(
+                     isSending = false,
+                     sosState = SosState.NavigateToAiHelp // Trigger navigation
+                 ) 
+             }
         }
     }
 
