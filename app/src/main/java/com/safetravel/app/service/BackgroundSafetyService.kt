@@ -81,6 +81,10 @@ class BackgroundSafetyService : Service(), SensorEventListener {
     // Constant vibration job
     private var vibrationJob: Job? = null
 
+    // Flags to avoid duplicate triggers from the same incident
+    private var detectorTriggerActive = false // Covers accident/fall detectors
+    private var volumeTriggerSent = false
+
     private data class SensorEventData(
         val sensorType: Int,
         val values: FloatArray,
@@ -105,6 +109,10 @@ class BackgroundSafetyService : Service(), SensorEventListener {
         
         // Initialize Volume SOS Detector
         volumeSOSDetector = VolumeSOSDetector(this) {
+            if (!volumeTriggerSent) {
+                volumeTriggerSent = true
+                sensorDataRepository.emitDetectorEvent(SensorDataRepository.DetectorTrigger.VolumeSos)
+            }
             showAccidentAlertNotification()
         }
         volumeSOSDetector.start()
@@ -145,6 +153,8 @@ class BackgroundSafetyService : Service(), SensorEventListener {
     private fun resetDetectors() {
         accidentDetector.reset()
         paperFallDetector.reset()
+        detectorTriggerActive = false
+        volumeTriggerSent = false
         
         // Stop vibration immediately
         stopVibration()
@@ -391,6 +401,10 @@ class BackgroundSafetyService : Service(), SensorEventListener {
                 sensorDataRepository.addSensorData(result)
                 
                 if (result.accidentConfirmed) {
+                    if (!detectorTriggerActive) {
+                        detectorTriggerActive = true
+                        sensorDataRepository.emitDetectorEvent(SensorDataRepository.DetectorTrigger.Accident)
+                    }
                     // Alert is handled by the observer in onCreate
                 }
             }
@@ -399,7 +413,9 @@ class BackgroundSafetyService : Service(), SensorEventListener {
                 val isPaperFall = paperFallDetector.processAccelerometer(event.values, event.timestamp / 1000000)
                 sensorDataRepository.updatePaperState(paperFallDetector.getCurrentStateName())
 
-                if (isPaperFall) {
+                if (isPaperFall && !detectorTriggerActive) {
+                    detectorTriggerActive = true
+                    sensorDataRepository.emitDetectorEvent(SensorDataRepository.DetectorTrigger.Fall)
                     showFallAlertNotification()
                 }
             }

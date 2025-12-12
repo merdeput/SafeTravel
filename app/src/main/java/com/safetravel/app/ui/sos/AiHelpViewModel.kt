@@ -1,11 +1,15 @@
 package com.safetravel.app.ui.sos
 
+import android.content.Context
+import android.content.Intent
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.safetravel.app.data.repository.SettingsRepository
 import com.safetravel.app.data.repository.SosRepository
+import com.safetravel.app.service.BackgroundSafetyService
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -27,6 +31,7 @@ data class AiHelpUiState(
 
 @HiltViewModel
 class AiHelpViewModel @Inject constructor(
+    @ApplicationContext private val appContext: Context,
     private val sosRepository: SosRepository, // Inject Repository
     private val settingsRepository: SettingsRepository // Inject Settings
 ) : ViewModel() {
@@ -94,6 +99,7 @@ class AiHelpViewModel @Inject constructor(
             val settings = getSettings()
             if (passcode == settings.passcode) {
                 _uiState.update { it.copy(passcodeError = null) }
+                sendResetToService()
                 resolveEmergency()
             } else {
                 _uiState.update { it.copy(passcodeError = "Invalid passcode.") }
@@ -127,5 +133,12 @@ class AiHelpViewModel @Inject constructor(
                 _uiState.update { it.copy(emergencyStopped = true) }
             }
         }
+    }
+
+    private fun sendResetToService() {
+        val intent = Intent(appContext, BackgroundSafetyService::class.java).apply {
+            action = BackgroundSafetyService.ACTION_RESET_DETECTOR
+        }
+        appContext.startService(intent)
     }
 }

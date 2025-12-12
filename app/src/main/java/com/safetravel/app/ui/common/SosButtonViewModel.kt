@@ -1,11 +1,16 @@
 package com.safetravel.app.ui.common
 
+import android.content.Context
+import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.safetravel.app.data.repository.AuthRepository
+import com.safetravel.app.data.repository.SensorDataRepository
 import com.safetravel.app.data.repository.SettingsRepository
 import com.safetravel.app.data.repository.SosRepository
+import com.safetravel.app.service.BackgroundSafetyService
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,9 +37,11 @@ data class SosUiState(
 
 @HiltViewModel
 class SosButtonViewModel @Inject constructor(
+    @ApplicationContext private val appContext: Context,
     private val sosRepository: SosRepository,
     private val authRepository: AuthRepository,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val sensorDataRepository: SensorDataRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SosUiState())
@@ -42,15 +49,32 @@ class SosButtonViewModel @Inject constructor(
 
     private var holdJob: Job? = null
     private var countdownJob: Job? = null
+    private var pendingMessage: String = "I need help!"
+    private var lastDismissedAt: Long = 0L
+
+    private enum class SosTrigger { MANUAL, ACCIDENT, FALL, VOLUME }
 
     // Retrieve settings lazily when needed
     private suspend fun getSettings() = settingsRepository.settingsFlow.first()
+
+    init {
+        // Auto-start the SOS countdown when detectors flag an accident/fall
+        viewModelScope.launch {
+            sensorDataRepository.detectorEvents.collect { trigger ->
+                when (trigger) {
+                    SensorDataRepository.DetectorTrigger.Accident -> startCountdownFromTrigger(SosTrigger.ACCIDENT)
+                    SensorDataRepository.DetectorTrigger.Fall -> startCountdownFromTrigger(SosTrigger.FALL)
+                    SensorDataRepository.DetectorTrigger.VolumeSos -> startCountdownFromTrigger(SosTrigger.VOLUME)
+                }
+            }
+        }
+    }
 
     fun onButtonPress() {
         holdJob = viewModelScope.launch {
             _uiState.update { it.copy(sosState = SosState.Holding) }
             delay(5000)
-            startCountdown()
+            startCountdown(SosTrigger.MANUAL)
         }
     }
 
@@ -61,24 +85,17 @@ class SosButtonViewModel @Inject constructor(
         }
     }
 
-    private fun startCountdown() {
-        if (countdownJob?.isActive == true) return
-        countdownJob = viewModelScope.launch {
-            val settings = getSettings()
-            val startSeconds = settings.countdownTime
-            
-            for (i in startSeconds downTo 1) {
-                val currentState = _uiState.value.sosState
-                val newState = when (currentState) {
-                    is SosState.Countdown -> SosState.Countdown(i)
-                    is SosState.PasscodeEntry -> SosState.PasscodeEntry(i)
-                    else -> SosState.Countdown(i)
-                }
-                _uiState.update { it.copy(sosState = newState) }
-                delay(1000)
-            }
-            sendHelp()
-        }
+    private fun startCountdownFromTrigger(trigger: SosTrigger) {
+        // Avoid restarting if a countdown is already running
+        val currentState = _uiState.value.sosState
+        if (countdownJob?.isActive == true ||
+            currentState is SosState.Countdown ||
+            currentState is SosState.PasscodeEntry ||
+            isInDismissCooldown()
+        ) return
+
+        holdJob?.cancel()
+        viewModelScope.launch { startCountdown(trigger) }
     }
 
     fun onImOkayClick() {
@@ -100,6 +117,8 @@ class SosButtonViewModel @Inject constructor(
             val settings = getSettings()
             if (passcode == settings.passcode) {
                 countdownJob?.cancel()
+                sendResetToService()
+                lastDismissedAt = System.currentTimeMillis()
                 _uiState.update { it.copy(sosState = SosState.Idle) }
             } else {
                 _uiState.update { it.copy(passcodeError = "Invalid passcode. Please try again.") }
@@ -110,6 +129,35 @@ class SosButtonViewModel @Inject constructor(
     fun onSendHelpClick() {
         countdownJob?.cancel()
         sendHelp()
+    }
+
+    private suspend fun startCountdown(trigger: SosTrigger) {
+        if (countdownJob?.isActive == true) return
+
+        val settings = getSettings()
+        val startSeconds = settings.countdownTime
+
+        pendingMessage = when (trigger) {
+            SosTrigger.MANUAL -> "I need help!"
+            SosTrigger.ACCIDENT -> "Accident detected. I need assistance."
+            SosTrigger.FALL -> "Fall detected. I need assistance."
+            SosTrigger.VOLUME -> "SOS triggered via volume buttons. I need assistance."
+        }
+
+        _uiState.update { it.copy(sosState = SosState.Countdown(startSeconds), passcodeError = null) }
+
+        countdownJob = viewModelScope.launch {
+            for (i in startSeconds downTo 1) {
+                val currentState = _uiState.value.sosState
+                val newState = when (currentState) {
+                    is SosState.PasscodeEntry -> SosState.PasscodeEntry(i)
+                    else -> SosState.Countdown(i)
+                }
+                _uiState.update { it.copy(sosState = newState) }
+                delay(1000)
+            }
+            sendHelp()
+        }
     }
 
     private fun sendHelp() {
@@ -127,7 +175,7 @@ class SosButtonViewModel @Inject constructor(
                  val result = sosRepository.sendSos(
                      userId = userId,
                      circleId = null, // Backend infers active circle
-                     message = "I need help!",
+                     message = pendingMessage,
                      lat = lat,
                      lng = lng
                  )
@@ -151,7 +199,20 @@ class SosButtonViewModel @Inject constructor(
     }
 
     fun onNavigatedToAiHelp() {
+        pendingMessage = "I need help!"
         _uiState.update { it.copy(sosState = SosState.Idle) }
+    }
+
+    private fun sendResetToService() {
+        val intent = Intent(appContext, BackgroundSafetyService::class.java).apply {
+            action = BackgroundSafetyService.ACTION_RESET_DETECTOR
+        }
+        appContext.startService(intent)
+    }
+
+    private fun isInDismissCooldown(): Boolean {
+        val cooldownMs = 5_000L // Avoid immediate re-triggers right after dismissal
+        return (System.currentTimeMillis() - lastDismissedAt) < cooldownMs
     }
 
     override fun onCleared() {

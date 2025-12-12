@@ -43,7 +43,7 @@ class PedestrianAccidentScreenViewModel @Inject constructor(
     val detectionTime = _detectionTime.asStateFlow()
 
     // Countdown Logic State
-    private val _isCountdownActive = MutableStateFlow(false)
+    private val _isCountdownActive = MutableStateFlow(false) // Legacy debug dialog; kept for UI compatibility
     val isCountdownActive = _isCountdownActive.asStateFlow()
 
     private val _countdownSeconds = MutableStateFlow(30)
@@ -69,8 +69,10 @@ class PedestrianAccidentScreenViewModel @Inject constructor(
     }
 
     private fun checkForAccident() {
-        if (!_accidentDetected.value && !_isCountdownActive.value) {
-            startCountdown()
+        // Avoid launching local debug countdown; global SOS flow handles alerts.
+        if (!_accidentDetected.value) {
+            _accidentDetected.value = true
+            _detectionTime.value = System.currentTimeMillis()
         }
     }
 
@@ -97,8 +99,8 @@ class PedestrianAccidentScreenViewModel @Inject constructor(
     }
 
     fun onImOkayClick() {
-        _showPasscodeDialog.value = true
-        _passcodeError.value = null
+        // Local dialog no longer drives real alerts; keep no-op for UI compatibility
+        _showPasscodeDialog.value = false
     }
 
     fun onVerifyPasscode(passcode: String) {

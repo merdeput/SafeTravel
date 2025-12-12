@@ -2,6 +2,8 @@ package com.safetravel.app.data.repository
 
 import com.safetravel.app.ui.sos.data.DetectionState
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -11,6 +13,12 @@ private const val MAX_DEQUE_SIZE = 300
 @Singleton
 class SensorDataRepository @Inject constructor() {
 
+    sealed class DetectorTrigger {
+        object Accident : DetectorTrigger()
+        object Fall : DetectorTrigger()
+        object VolumeSos : DetectorTrigger()
+    }
+
     private val _sensorDataDeque = MutableStateFlow<ArrayDeque<DetectionState>>(ArrayDeque())
     val sensorDataDeque = _sensorDataDeque.asStateFlow()
 
@@ -19,6 +27,9 @@ class SensorDataRepository @Inject constructor() {
 
     private val _paperStateName = MutableStateFlow("IDLE")
     val paperStateName = _paperStateName.asStateFlow()
+
+    private val _detectorEvents = MutableSharedFlow<DetectorTrigger>(extraBufferCapacity = 1)
+    val detectorEvents = _detectorEvents.asSharedFlow()
 
     fun addSensorData(state: DetectionState) {
         // Update latest state
@@ -35,5 +46,9 @@ class SensorDataRepository @Inject constructor() {
 
     fun updatePaperState(stateName: String) {
         _paperStateName.value = stateName
+    }
+
+    fun emitDetectorEvent(event: DetectorTrigger) {
+        _detectorEvents.tryEmit(event)
     }
 }
