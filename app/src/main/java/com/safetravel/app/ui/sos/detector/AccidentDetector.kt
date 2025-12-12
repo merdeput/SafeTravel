@@ -1,5 +1,6 @@
 package com.safetravel.app.ui.sos.detector
 
+import com.safetravel.app.ui.sos.data.ActivityHint
 import com.safetravel.app.ui.sos.data.DetectionState
 import com.safetravel.app.ui.sos.data.DetectionStateEnum
 import kotlin.math.abs
@@ -18,11 +19,14 @@ class AccidentDetector {
         private const val THRESHOLD_STILLNESS_SMA = 1.0f // "At rest" threshold
         private const val THRESHOLD_MOVEMENT_CANCEL = 6.0f // Movement high enough to cancel alarm (increased)
         private const val THRESHOLD_ORIENTATION_CHANGE = 45.0f // Degrees
+        private const val SPEED_DROP_THRESHOLD = 8.0f // m/s drop within window to reinforce crash
+        private const val SPEED_RECOVERY_THRESHOLD = 5.0f // m/s recovery to cancel bumps
         
         // Timings
         private const val TIME_IMPACT_WINDOW_MS = 3000L // 3 seconds to settle (increased)
         private const val TIME_VALIDATION_WINDOW_MS = 15000L // 15 seconds to confirm (reduced)
         private const val TIME_GYRO_SYNC_TOLERANCE_MS = 100L // Gyro data must be within 100ms
+        private const val SPEED_DROP_LOOKBACK_MS = 3000L // Lookback window for speed delta
         
         // Buffer settings
         private const val BUFFER_SIZE_NORMAL = 50 // 1 second at 50Hz
@@ -55,10 +59,23 @@ class AccidentDetector {
     // NEW: Movement tracking for smarter cancellation
     private var significantMovementCount = 0
     private val movementThreshold = 3 // Need 3 significant movements to cancel
+    private var lastSpeedMps = 0f
+    private var lastSpeedTimestampMs = 0L
 
-    fun processAccelerometer(values: FloatArray, timestamp: Long): DetectionState {
+    fun processAccelerometer(
+        values: FloatArray,
+        timestamp: Long,
+        context: ContextSnapshot = ContextSnapshot()
+    ): DetectionState {
         // --- 1. Physics Calculations ---
         
+        val now = System.currentTimeMillis()
+        val speedMps = context.speedMps.coerceAtLeast(0f)
+        val activityHint = context.activityHint
+        val (speedDelta, hasSpeedDrop) = updateSpeedContext(speedMps, now)
+        val isVehicleContext = speedMps > 3f || activityHint == ActivityHint.VEHICLE
+        val isActiveContext = isVehicleContext || activityHint == ActivityHint.RUNNING || speedMps > 2.5f
+
         // A. Total Acceleration Magnitude (TAM)
         val tam = sqrt(values[0].pow(2) + values[1].pow(2) + values[2].pow(2))
         
@@ -103,7 +120,10 @@ class AccidentDetector {
         currentGravity[2] = alpha * values[2] + (1 - alpha) * currentGravity[2]
         
         // --- 2. State Machine ---
-        val now = System.currentTimeMillis()
+        val tamThreshold = scaledThreshold(THRESHOLD_IMPACT_TAM, speedMps)
+        val jerkThreshold = scaledThreshold(THRESHOLD_IMPACT_JERK, speedMps)
+        val tumbleTamThreshold = scaledThreshold(THRESHOLD_TUMBLE_TAM, speedMps)
+        val gyroThreshold = if (speedMps > 12f) THRESHOLD_TUMBLE_GYRO * 0.85f else THRESHOLD_TUMBLE_GYRO
         
         // Calculate orientation change
         val orientationChange = if (isReferenceSet && isReferenceLocked) {
@@ -129,11 +149,11 @@ class AccidentDetector {
                 
                 // TRIGGER LOGIC
                 // 1. Hard Impact: High G + High Jerk
-                val isHardImpact = tam > THRESHOLD_IMPACT_TAM && jerk > THRESHOLD_IMPACT_JERK
+                val isHardImpact = tam > tamThreshold && jerk > jerkThreshold
                 
                 // 2. Tumble: Moderate G + High Rotation (only if gyro is fresh)
-                val isTumble = tam > THRESHOLD_TUMBLE_TAM && 
-                              gyroMagnitude > THRESHOLD_TUMBLE_GYRO && 
+                val isTumble = tam > tumbleTamThreshold && 
+                              gyroMagnitude > gyroThreshold && 
                               isGyroFresh
                 
                 if (isHardImpact || isTumble) {
@@ -163,8 +183,9 @@ class AccidentDetector {
                     // Check 2: Did orientation change significantly?
                     val isOrientationChanged = isReferenceSet && 
                                               (orientationChange > THRESHOLD_ORIENTATION_CHANGE)
-                    
-                    if (isStill || isOrientationChanged) {
+                    val hasMeaningfulContextDrop = hasSpeedDrop || speedMps < 1.5f
+
+                    if (isStill || isOrientationChanged || hasMeaningfulContextDrop) {
                         currentState = DetectionStateEnum.VALIDATING
                         validationStartTime = now
                     } else {
@@ -193,9 +214,20 @@ class AccidentDetector {
                         significantMovementCount--
                     }
                 }
+
+                // Cancel if speed returns without a meaningful drop (likely a bump)
+                if (speedMps > SPEED_RECOVERY_THRESHOLD && !hasSpeedDrop) {
+                    resetToMonitoring()
+                }
                 
                 // TIMEOUT CONDITION:
-                if (elapsed > TIME_VALIDATION_WINDOW_MS && currentState == DetectionStateEnum.VALIDATING) {
+                val validationWindow = if (hasSpeedDrop || speedMps < 1.5f) {
+                    TIME_VALIDATION_WINDOW_MS / 2
+                } else {
+                    TIME_VALIDATION_WINDOW_MS
+                }
+
+                if (elapsed > validationWindow && currentState == DetectionStateEnum.VALIDATING) {
                     // User has been relatively still for validation period
                     currentState = DetectionStateEnum.CONFIRMED_ACCIDENT
                 }
@@ -212,25 +244,18 @@ class AccidentDetector {
         
         val impactDuration = if (impactStartTime > 0) now - impactStartTime else 0L
         
-        return DetectionState(
-            accelX = values[0],
-            accelY = values[1],
-            accelZ = values[2],
+        return buildState(
+            values = values,
             tam = tam,
             jerk = jerk,
-            gyroX = currentGyro[0],
-            gyroY = currentGyro[1],
-            gyroZ = currentGyro[2],
-            angularMagnitude = gyroMagnitude,
-            gravityX = currentGravity[0],
-            gravityY = currentGravity[1],
-            gravityZ = currentGravity[2],
+            gyroMagnitude = gyroMagnitude,
             orientationChange = orientationChange,
             sma = sma,
             impactDuration = impactDuration,
             currentState = currentState,
-            accidentConfirmed = currentState == DetectionStateEnum.CONFIRMED_ACCIDENT,
-            validationStartTime = validationStartTime
+            speedMps = speedMps,
+            speedDelta = speedDelta,
+            activityHint = activityHint
         )
     }
     
@@ -259,6 +284,66 @@ class AccidentDetector {
         maxBufferSize = BUFFER_SIZE_NORMAL // Restore normal buffer size
         accelBuffer.clear() // Clean slate
         significantMovementCount = 0
+    }
+
+    private fun updateSpeedContext(speedMps: Float, nowMs: Long): Pair<Float, Boolean> {
+        val delta = if (lastSpeedTimestampMs > 0 && nowMs - lastSpeedTimestampMs < SPEED_DROP_LOOKBACK_MS) {
+            lastSpeedMps - speedMps
+        } else {
+            0f
+        }
+
+        lastSpeedMps = speedMps
+        lastSpeedTimestampMs = nowMs
+
+        return delta to (delta > SPEED_DROP_THRESHOLD)
+    }
+
+    private fun scaledThreshold(base: Float, speedMps: Float): Float {
+        return when {
+            speedMps > 15f -> base * 0.75f
+            speedMps > 8f -> base * 0.9f
+            speedMps < 3f -> base * 1.15f
+            else -> base
+        }
+    }
+
+    private fun buildState(
+        values: FloatArray,
+        tam: Float,
+        jerk: Float,
+        gyroMagnitude: Float,
+        orientationChange: Float,
+        sma: Float,
+        impactDuration: Long,
+        currentState: DetectionStateEnum,
+        speedMps: Float,
+        speedDelta: Float,
+        activityHint: ActivityHint
+    ): DetectionState {
+        return DetectionState(
+            accelX = values[0],
+            accelY = values[1],
+            accelZ = values[2],
+            tam = tam,
+            jerk = jerk,
+            gyroX = currentGyro[0],
+            gyroY = currentGyro[1],
+            gyroZ = currentGyro[2],
+            angularMagnitude = gyroMagnitude,
+            gravityX = currentGravity[0],
+            gravityY = currentGravity[1],
+            gravityZ = currentGravity[2],
+            orientationChange = orientationChange,
+            sma = sma,
+            speedMps = speedMps,
+            speedDeltaMps = speedDelta,
+            activityHint = activityHint,
+            impactDuration = impactDuration,
+            currentState = currentState,
+            accidentConfirmed = currentState == DetectionStateEnum.CONFIRMED_ACCIDENT,
+            validationStartTime = validationStartTime
+        )
     }
     
     private fun calculateOrientationChange(current: FloatArray, previous: FloatArray): Float {

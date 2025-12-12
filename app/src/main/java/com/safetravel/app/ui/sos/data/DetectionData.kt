@@ -1,5 +1,7 @@
 package com.safetravel.app.ui.sos.data
 
+import com.safetravel.app.ui.sos.data.ActivityHint
+
 data class DetectionState(
     val accelX: Float = 0f,
     val accelY: Float = 0f,
@@ -15,6 +17,9 @@ data class DetectionState(
     val gravityZ: Float = 0f,
     val orientationChange: Float = 0f,
     val sma: Float = 0f,
+    val speedMps: Float = 0f,
+    val speedDeltaMps: Float = 0f,
+    val activityHint: ActivityHint = ActivityHint.UNKNOWN,
     val impactDuration: Long = 0L,
     val currentState: DetectionStateEnum = DetectionStateEnum.IDLE,
     val accidentConfirmed: Boolean = false,

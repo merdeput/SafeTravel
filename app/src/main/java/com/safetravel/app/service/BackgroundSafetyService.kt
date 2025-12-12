@@ -10,6 +10,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.location.Location
 import android.os.Build
 import android.os.IBinder
 import android.os.VibrationEffect
@@ -22,6 +23,8 @@ import com.safetravel.app.data.repository.AuthRepository
 import com.safetravel.app.data.repository.LocationService
 import com.safetravel.app.data.repository.SensorDataRepository
 import com.safetravel.app.data.repository.SosRepository
+import com.safetravel.app.ui.sos.data.ActivityHint
+import com.safetravel.app.ui.sos.detector.ContextSnapshot
 import com.safetravel.app.ui.sos.detector.AccidentDetector
 import com.safetravel.app.ui.sos.detector.PaperFallDetector
 import com.safetravel.app.ui.sos.detector.VolumeSOSDetector
@@ -71,6 +74,10 @@ class BackgroundSafetyService : Service(), SensorEventListener {
     private var magnetometer: Sensor? = null
     
     private var lastAccelerometerValues = FloatArray(3)
+    private var latestSpeedMps = 0f
+    private var lastLocation: Location? = null
+    private var lastLocationTimestampMs: Long = 0L
+    private var latestActivityHint: ActivityHint = ActivityHint.UNKNOWN
 
     // Channel to process sensor events sequentially and avoid concurrency issues
     private val sensorEventChannel = Channel<SensorEventData>(Channel.UNLIMITED)
@@ -155,6 +162,10 @@ class BackgroundSafetyService : Service(), SensorEventListener {
         paperFallDetector.reset()
         detectorTriggerActive = false
         volumeTriggerSent = false
+        latestSpeedMps = 0f
+        lastLocation = null
+        lastLocationTimestampMs = 0L
+        latestActivityHint = ActivityHint.UNKNOWN
         
         // Stop vibration immediately
         stopVibration()
@@ -369,10 +380,9 @@ class BackgroundSafetyService : Service(), SensorEventListener {
 
     private fun startLocationTracking() {
         // Request location updates every 10 seconds
-        locationService.getLocationUpdates(10000L) 
+        locationService.getLocationUpdates(2000L)
             .onEach { location ->
-                // Location updates are active. 
-                // In a real app, you might save this to a DB or send to server.
+                updateSpeedFromLocation(location)
             }
             .launchIn(serviceScope)
     }
@@ -394,9 +404,10 @@ class BackgroundSafetyService : Service(), SensorEventListener {
     }
 
     private suspend fun processSensorEvent(event: SensorEventData) {
+        val contextSnapshot = currentContextSnapshot()
         when (event.sensorType) {
             Sensor.TYPE_LINEAR_ACCELERATION -> {
-                val result = accidentDetector.processAccelerometer(event.values, event.timestamp)
+                val result = accidentDetector.processAccelerometer(event.values, event.timestamp, contextSnapshot)
                 // Push to repository so UI can observe
                 sensorDataRepository.addSensorData(result)
                 
@@ -439,6 +450,43 @@ class BackgroundSafetyService : Service(), SensorEventListener {
         serviceScope.cancel()
         if (::volumeSOSDetector.isInitialized) {
             volumeSOSDetector.stop()
+        }
+    }
+
+    private fun updateSpeedFromLocation(location: Location) {
+        val nowMs = System.currentTimeMillis()
+        val computedSpeed = if (location.hasSpeed()) {
+            location.speed
+        } else {
+            val lastLoc = lastLocation
+            if (lastLoc != null) {
+                val distance = lastLoc.distanceTo(location) // meters
+                val timeDeltaSec = ((nowMs - lastLocationTimestampMs).coerceAtLeast(1L)) / 1000f
+                distance / timeDeltaSec
+            } else {
+                0f
+            }
+        }
+        latestSpeedMps = computedSpeed.coerceAtLeast(0f)
+        lastLocation = location
+        lastLocationTimestampMs = nowMs
+        latestActivityHint = inferActivityHint(latestSpeedMps)
+    }
+
+    private fun currentContextSnapshot(): ContextSnapshot {
+        return ContextSnapshot(
+            speedMps = latestSpeedMps,
+            activityHint = latestActivityHint
+        )
+    }
+
+    private fun inferActivityHint(speedMps: Float): ActivityHint {
+        return when {
+            speedMps > 6f -> ActivityHint.VEHICLE
+            speedMps > 2.5f -> ActivityHint.RUNNING
+            speedMps > 0.8f -> ActivityHint.WALKING
+            speedMps >= 0f -> ActivityHint.STATIONARY
+            else -> ActivityHint.UNKNOWN
         }
     }
 }

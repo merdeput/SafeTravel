@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -61,7 +63,7 @@ fun AlertStatusCard(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = if (accidentDetected) "⚠️ ACCIDENT DETECTED" else "✓ MONITORING ACTIVE",
+                text = if (accidentDetected) "ACCIDENT DETECTED" else "MONITORING ACTIVE",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 color = if (accidentDetected)
@@ -133,49 +135,57 @@ fun CalculationsCard(state: DetectionState) {
 
             Spacer(modifier = Modifier.height(12.dp))
 
+            // Context
+            SectionHeader("Context")
+            MetricRow("Speed", String.format("%.2f m/s", state.speedMps))
+            MetricRow("Speed delta", String.format("%.2f m/s", state.speedDeltaMps))
+            MetricRow("Activity Hint", state.activityHint.name)
+
+            Divider(Modifier.padding(vertical = 12.dp))
+
             // Raw Accelerometer
             SectionHeader("Raw Accelerometer")
-            MetricRow("X-axis", String.format("%.3f m/s²", state.accelX))
-            MetricRow("Y-axis", String.format("%.3f m/s²", state.accelY))
-            MetricRow("Z-axis", String.format("%.3f m/s²", state.accelZ))
+            MetricRow("X-axis", String.format("%.3f m/s^2", state.accelX))
+            MetricRow("Y-axis", String.format("%.3f m/s^2", state.accelY))
+            MetricRow("Z-axis", String.format("%.3f m/s^2", state.accelZ))
 
             Divider(Modifier.padding(vertical = 12.dp))
 
             // TAM (Total Acceleration Magnitude)
             SectionHeader("Total Acceleration Magnitude (TAM)")
-            MetricRow("Formula", "√(ax² + ay² + az²)")
-            MetricRow("Value", String.format("%.3f m/s²", state.tam), highlight = state.tam > 20f)
+            MetricRow("Formula", "sqrt(ax^2 + ay^2 + az^2)")
+            MetricRow("Value", String.format("%.3f m/s^2", state.tam), highlight = state.tam > 20f)
 
             Divider(Modifier.padding(vertical = 12.dp))
 
             // Jerk
             SectionHeader("Jerk (Rate of Change)")
-            MetricRow("Formula", "√(jx² + jy² + jz²)")
-            MetricRow("Value", String.format("%.2f m/s³", state.jerk), highlight = state.jerk > 100f)
+            MetricRow("Formula", "sqrt(jx^2 + jy^2 + jz^2)")
+            MetricRow("Value", String.format("%.2f m/s^3", state.jerk), highlight = state.jerk > 100f)
 
             Divider(Modifier.padding(vertical = 12.dp))
 
             // Angular Velocity
             SectionHeader("Angular Velocity")
-            MetricRow("ωx", String.format("%.3f rad/s", state.gyroX))
-            MetricRow("ωy", String.format("%.3f rad/s", state.gyroY))
-            MetricRow("ωz", String.format("%.3f rad/s", state.gyroZ))
+            MetricRow("wx", String.format("%.3f rad/s", state.gyroX))
+            MetricRow("wy", String.format("%.3f rad/s", state.gyroY))
+            MetricRow("wz", String.format("%.3f rad/s", state.gyroZ))
             MetricRow("Magnitude", String.format("%.3f rad/s", state.angularMagnitude), highlight = state.angularMagnitude > 4f)
 
             Divider(Modifier.padding(vertical = 12.dp))
 
             // Gravity & Orientation
             SectionHeader("Gravity Vector & Orientation")
-            MetricRow("Gravity X", String.format("%.3f m/s²", state.gravityX))
-            MetricRow("Gravity Y", String.format("%.3f m/s²", state.gravityY))
-            MetricRow("Gravity Z", String.format("%.3f m/s²", state.gravityZ))
-            MetricRow("Orientation Change", String.format("%.1f°", state.orientationChange), highlight = state.orientationChange > 60f)
+            MetricRow("Gravity X", String.format("%.3f m/s^2", state.gravityX))
+            MetricRow("Gravity Y", String.format("%.3f m/s^2", state.gravityY))
+            MetricRow("Gravity Z", String.format("%.3f m/s^2", state.gravityZ))
+            MetricRow("Orientation Change", String.format("%.1f deg", state.orientationChange), highlight = state.orientationChange > 60f)
 
             Divider(Modifier.padding(vertical = 12.dp))
 
             // SMA (Signal Magnitude Area)
             SectionHeader("Signal Magnitude Area (1s window)")
-            MetricRow("SMA", String.format("%.3f m/s²", state.sma))
+            MetricRow("SMA", String.format("%.3f m/s^2", state.sma))
         }
     }
 }
@@ -192,11 +202,12 @@ fun ThresholdStatusCard(state: DetectionState) {
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            ThresholdRow("TAM > 20 m/s²", state.tam > 20f)
-            ThresholdRow("Jerk > 100 m/s³", state.jerk > 100f)
+            ThresholdRow("TAM > 20 m/s^2", state.tam > 20f)
+            ThresholdRow("Jerk > 100 m/s^3", state.jerk > 100f)
             ThresholdRow("Angular > 4 rad/s", state.angularMagnitude > 4f)
-            ThresholdRow("Orientation > 60°", state.orientationChange > 60f)
+            ThresholdRow("Orientation > 60 deg", state.orientationChange > 60f)
             ThresholdRow("Duration > 150ms", state.impactDuration > 150)
+            ThresholdRow("Speed drop > 8 m/s", state.speedDeltaMps > 8f)
 
             Spacer(modifier = Modifier.height(12.dp))
 
@@ -204,11 +215,12 @@ fun ThresholdStatusCard(state: DetectionState) {
                 state.tam > 20f,
                 state.jerk > 100f,
                 state.angularMagnitude > 4f || state.orientationChange > 60f,
-                state.impactDuration > 150
+                state.impactDuration > 150,
+                state.speedDeltaMps > 8f
             ).count { it }
 
             Text(
-                text = "Conditions Met: $conditionsMet / 4",
+                text = "Conditions Met: $conditionsMet / 5",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 color = if (conditionsMet >= 3) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
@@ -238,7 +250,7 @@ fun PostImpactCard(state: DetectionState) {
             val remaining = max(0f, 30f - elapsed)
 
             Text(
-                text = "Monitoring for stillness...",
+                text = "Monitoring for stillness and speed drop...",
                 style = MaterialTheme.typography.bodyMedium
             )
 
@@ -256,9 +268,11 @@ fun PostImpactCard(state: DetectionState) {
                 style = MaterialTheme.typography.bodySmall
             )
 
-            MetricRow("Current SMA", String.format("%.3f m/s²", state.sma))
-            MetricRow("Stillness Required", "< 1.0 m/s²")
-            MetricRow("User Stationary", if (state.sma < 1.0f) "YES ✓" else "NO ✗")
+            MetricRow("Current SMA", String.format("%.3f m/s^2", state.sma))
+            MetricRow("Stillness Required", "< 1.0 m/s^2")
+            MetricRow("Speed", String.format("%.2f m/s", state.speedMps))
+            MetricRow("Speed drop", if (state.speedDeltaMps > 8f) "YES" else "NO")
+            MetricRow("User Stationary", if (state.sma < 1.0f) "YES" else "NO")
         }
     }
 }
@@ -319,7 +333,7 @@ fun ThresholdRow(condition: String, met: Boolean) {
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = if (met) "✓" else "✗",
+                text = if (met) "Y" else "N",
                 color = Color.White,
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Bold
@@ -345,7 +359,7 @@ fun DebugDequeCard(deque: ArrayDeque<DetectionState>) {
             Spacer(modifier = Modifier.height(8.dp))
 
             deque.takeLast(5).forEachIndexed { index, state ->
-                Text("  [${index}] TAM: ${String.format("%.3f", state.tam)}")
+                Text("  [$index] TAM: ${String.format("%.3f", state.tam)}, v=${String.format("%.2f", state.speedMps)} m/s")
             }
         }
     }
@@ -401,12 +415,16 @@ fun VolumeSosStatusCard() {
                 style = MaterialTheme.typography.bodyMedium
             )
             Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "Status: Active",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Bold
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Badge(containerColor = MaterialTheme.colorScheme.primary) {}
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Status: Active",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
     }
 }
