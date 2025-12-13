@@ -15,6 +15,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.safetravel.app.data.repository.AuthRepository
 import dagger.hilt.android.AndroidEntryPoint
 import com.safetravel.app.ui.MainAppScreen
 import com.safetravel.app.ui.createtrip.CreateTripScreen
@@ -28,27 +29,33 @@ import com.safetravel.app.ui.sos.SosAlertsScreen
 import com.safetravel.app.ui.theme.BeeTheme
 import com.safetravel.app.ui.triphistory.TripHistoryScreen
 import com.safetravel.app.ui.trip_live.TripManagementScreen
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    
+    @Inject
+    lateinit var authRepository: AuthRepository
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         installSplashScreen()
         enableEdgeToEdge()
         setContent {
             BeeTheme {
-                AppNavigation()
+                // Determine start destination based on whether a token exists
+                val startDestination = if (authRepository.currentToken != null) "main_app" else "login"
+                AppNavigation(startDestination = startDestination)
             }
         }
     }
 }
 
 @Composable
-fun AppNavigation() {
+fun AppNavigation(startDestination: String) {
     val navController = rememberNavController()
 
-    // Start at Login (Auth Flow) - In a real app with persistence, we'd check token here
-    NavHost(navController = navController, startDestination = "login") {
+    NavHost(navController = navController, startDestination = startDestination) {
 
         // --- Auth Flow ---
         composable("login") {

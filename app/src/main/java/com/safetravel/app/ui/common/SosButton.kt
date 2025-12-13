@@ -76,7 +76,7 @@ private fun SosActivationButton(
 
     val holdProgress by animateFloatAsState(
         targetValue = if (sosState is SosState.Holding) 1f else 0f,
-        animationSpec = tween(durationMillis = 5000),
+        animationSpec = tween(durationMillis = 4000),
         label = "HoldProgress"
     )
     

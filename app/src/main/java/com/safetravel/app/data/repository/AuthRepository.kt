@@ -1,33 +1,78 @@
 package com.safetravel.app.data.repository
 
+import android.content.Context
 import android.util.Log
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
 import com.safetravel.app.data.api.ApiService
 import com.safetravel.app.data.model.LoginResponse
 import com.safetravel.app.data.model.RegisterRequest
 import com.safetravel.app.data.model.User
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 import javax.inject.Singleton
 
+// Define DataStore for auth preferences
+private val Context.authDataStore: DataStore<Preferences> by preferencesDataStore(name = "auth_prefs")
+
 @Singleton
 class AuthRepository @Inject constructor(
-    private val apiService: ApiService
+    private val apiService: ApiService,
+    @ApplicationContext private val context: Context
 ) {
+    
+    private object AuthKeys {
+        val ACCESS_TOKEN = stringPreferencesKey("access_token")
+    }
+
     // Simple in-memory storage for the token.
-    // In a real production app, you would save this to EncryptedSharedPreferences or DataStore.
     var currentToken: String? = null
-        private set // Only allow setting via login
+        private set // Only allow setting via login/init
         
     // In-memory storage for current user details
     var currentUser: User? = null
         private set
 
+    init {
+        // Load token from DataStore on startup (blocking to ensure it's ready)
+        runBlocking {
+            currentToken = context.authDataStore.data.map { preferences ->
+                preferences[AuthKeys.ACCESS_TOKEN]
+            }.first()
+        }
+        
+        if (currentToken != null) {
+            Log.d("AuthRepo", "Restored token from storage")
+            // Optimistically fetch user data in background
+            CoroutineScope(Dispatchers.IO).launch {
+                fetchCurrentUser()
+            }
+        }
+    }
+    
     suspend fun login(username: String, pass: String): Result<LoginResponse> {
         return try {
             val response = apiService.login(username = username, password = pass)
 
             if (response.isSuccessful && response.body() != null) {
                 val loginResponse = response.body()!!
-                currentToken = loginResponse.accessToken // Save the token
+                
+                // Save to memory
+                currentToken = loginResponse.accessToken 
+                
+                // Save to DataStore
+                context.authDataStore.edit { preferences ->
+                    preferences[AuthKeys.ACCESS_TOKEN] = loginResponse.accessToken
+                }
                 
                 // Fetch user details immediately after login
                 fetchCurrentUser()
@@ -45,7 +90,7 @@ class AuthRepository @Inject constructor(
         }
     }
 
-    private suspend fun fetchCurrentUser() {
+    suspend fun fetchCurrentUser() {
         val token = currentToken ?: return
         try {
             val response = apiService.getCurrentUser("Bearer $token")
@@ -85,26 +130,33 @@ class AuthRepository @Inject constructor(
 
         return try {
             // 1. Call the server with "Bearer TOKEN" to invalidate session
-            val response = apiService.logout("Bearer $token")
-
-            // 2. Clear local token regardless of server success
-            // (if server is down, we still want the user to be able to logout locally)
-            currentToken = null
-            currentUser = null
-
-            if (response.isSuccessful) {
-                Log.d("AuthRepo", "Server logout success")
-                Result.success(Unit)
-            } else {
-                Log.w("AuthRepo", "Server logout failed: ${response.code()}")
-                // We still consider it a "success" for the app flow because the local token is gone
-                Result.success(Unit)
+            // We ignore errors here because we want to clear local state anyway
+            try {
+                apiService.logout("Bearer $token")
+            } catch (e: Exception) {
+                Log.w("AuthRepo", "Server logout failed", e)
             }
-        } catch (e: Exception) {
-            // Even if network fails, we clear the token locally so the user isn't stuck
+
+            // 2. Clear local token 
             currentToken = null
             currentUser = null
-            Log.e("AuthRepo", "Logout network exception", e)
+            
+            // 3. Clear DataStore
+            context.authDataStore.edit { preferences ->
+                preferences.remove(AuthKeys.ACCESS_TOKEN)
+            }
+
+            Log.d("AuthRepo", "Logout success")
+            Result.success(Unit)
+            
+        } catch (e: Exception) {
+            // Should not happen due to inner try-catch, but safe fallback
+            currentToken = null
+            currentUser = null
+            context.authDataStore.edit { preferences ->
+                preferences.remove(AuthKeys.ACCESS_TOKEN)
+            }
+            Log.e("AuthRepo", "Logout exception", e)
             Result.success(Unit)
         }
     }

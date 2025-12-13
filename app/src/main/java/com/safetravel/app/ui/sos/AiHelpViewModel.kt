@@ -5,12 +5,14 @@ import android.content.Intent
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.ai.client.generativeai.GenerativeModel
+import com.google.ai.client.generativeai.type.content
+import com.safetravel.app.BuildConfig
 import com.safetravel.app.data.repository.SettingsRepository
 import com.safetravel.app.data.repository.SosRepository
 import com.safetravel.app.service.BackgroundSafetyService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
@@ -26,55 +28,115 @@ data class AiHelpUiState(
     val isAwaitingResponse: Boolean = false,
     val emergencyStopped: Boolean = false,
     val passcodeError: String? = null,
-    val stopError: String? = null // To show server errors
+    val stopError: String? = null,
+    val isRecording: Boolean = false,
+    val isSpeaking: Boolean = false,
+    val voiceEnabled: Boolean = true // Toggle for voice features
 )
 
 @HiltViewModel
 class AiHelpViewModel @Inject constructor(
     @ApplicationContext private val appContext: Context,
-    private val sosRepository: SosRepository, // Inject Repository
-    private val settingsRepository: SettingsRepository // Inject Settings
+    private val sosRepository: SosRepository,
+    private val settingsRepository: SettingsRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AiHelpUiState())
     val uiState = _uiState.asStateFlow()
 
-    // We need the alert ID to resolve it. 
-    // In a real app, you'd pass this ID via Navigation Arguments.
-    // For now, we'll fetch the latest active alert to resolve it.
+    private val generativeModel by lazy {
+        GenerativeModel(
+            modelName = "gemini-2.5-flash",
+            apiKey = BuildConfig.GEMINI_API_KEY,
+            systemInstruction = content {
+                text("""You are an emergency safety assistant for SafeTravel app. Your role is to provide ACTIONABLE guidance in crisis situations.
+
+RESPONSE RULES:
+• Use bullet points (•) for all multi-step instructions
+• Maximum 3-4 bullet points per response
+• Each bullet: 1 short, clear action (5-10 words)
+• NO empathy phrases ("I understand", "I'm sorry", "Stay calm")
+• NO questions unless absolutely necessary for safety
+• Be direct and authoritative
+
+PRIORITY ACTIONS:
+• Life-threatening situations → "Call 113 (Police) or 115 (Ambulance) NOW"
+• Injuries → Specific first aid steps only
+• Unsafe location → Immediate relocation instructions
+• Threats → Concrete safety measures
+
+FORMAT EXAMPLES:
+Bad: "I understand you're scared. It's important to stay calm. You should try to find a safe place."
+Good: 
+• Move to nearest public area with people
+• Keep phone ready to call 113
+• Avoid dark/isolated spaces
+
+Bad: "Can you tell me more about what's happening? I want to help you feel better."
+Good:
+• Share your live location with emergency contact
+• Note nearby landmarks/street signs
+• Stay on main roads
+
+MEDICAL GUIDANCE:
+• Only basic first aid (bleeding, choking, burns)
+• Always end with: "Call 115 for medical help"
+• Never diagnose or give treatment advice
+
+Keep responses under 40 words total. Action over comfort.""")
+            }
+        )
+    }
+
     private var currentAlertId: Int? = null
 
     init {
-        // Initial message from the AI
         _uiState.value = _uiState.value.copy(
             messages = listOf(ChatMessage("Help is on the way. How can I assist you while you wait?", false))
         )
-        
-        // Try to find the active alert ID
         fetchLatestActiveAlert()
     }
-    
+
     private suspend fun getSettings() = settingsRepository.settingsFlow.first()
-    
+
     private fun fetchLatestActiveAlert() {
         viewModelScope.launch {
-             val result = sosRepository.getMySosAlerts()
-             if (result.isSuccess) {
-                 // Find the most recent active alert (not resolved)
-                 val activeAlert = result.getOrNull()
-                     ?.filter { it.status != "resolved" }
-                     ?.maxByOrNull { it.createdAt ?: "" } 
-                     
-                 currentAlertId = activeAlert?.id
-                 Log.d("AiHelpViewModel", "Found active alert ID: $currentAlertId")
-             } else {
-                 Log.e("AiHelpViewModel", "Failed to fetch alerts: ${result.exceptionOrNull()?.message}")
-             }
+            val result = sosRepository.getMySosAlerts()
+            if (result.isSuccess) {
+                val activeAlert = result.getOrNull()
+                    ?.filter { it.status != "resolved" }
+                    ?.maxByOrNull { it.createdAt ?: "" }
+
+                currentAlertId = activeAlert?.id
+                Log.d("AiHelpViewModel", "Found active alert ID: $currentAlertId")
+            } else {
+                Log.e("AiHelpViewModel", "Failed to fetch alerts: ${result.exceptionOrNull()?.message}")
+            }
         }
     }
 
     fun onQueryChange(query: String) {
         _uiState.update { it.copy(currentQuery = query) }
+    }
+
+    fun setRecordingState(isRecording: Boolean) {
+        _uiState.update { it.copy(isRecording = isRecording) }
+    }
+
+    fun setSpeakingState(isSpeaking: Boolean) {
+        _uiState.update { it.copy(isSpeaking = isSpeaking) }
+    }
+
+    fun onTranscriptionReceived(transcription: String) {
+        if (transcription.isBlank()) return
+
+        // Add user message from voice
+        val newMessages = _uiState.value.messages.toMutableList()
+        newMessages.add(ChatMessage(transcription, true))
+        _uiState.update { it.copy(messages = newMessages, currentQuery = "") }
+
+        // Process the transcription
+        sendMessageToAI(transcription)
     }
 
     fun onAskClick() {
@@ -83,14 +145,48 @@ class AiHelpViewModel @Inject constructor(
 
         val newMessages = _uiState.value.messages.toMutableList()
         newMessages.add(ChatMessage(userQuery, true))
+        _uiState.update { it.copy(messages = newMessages, currentQuery = "") }
 
-        _uiState.update { it.copy(messages = newMessages, isAwaitingResponse = true, currentQuery = "") }
+        sendMessageToAI(userQuery)
+    }
 
-        // Simulate AI response
+    private fun sendMessageToAI(userQuery: String) {
+        _uiState.update { it.copy(isAwaitingResponse = true) }
+
         viewModelScope.launch {
-            delay(1500)
-            newMessages.add(ChatMessage("This is a simulated AI response to your query: '$userQuery'. In a real scenario, I would provide helpful information based on your situation.", false))
-            _uiState.update { it.copy(messages = newMessages, isAwaitingResponse = false) }
+            try {
+                if (BuildConfig.GEMINI_API_KEY.isBlank()) {
+                    throw Exception("API Key is missing. Please add GEMINI_API_KEY to local.properties.")
+                }
+
+                val history = _uiState.value.messages.dropLast(1).map {
+                    content(role = if (it.isFromUser) "user" else "model") { text(it.message) }
+                }
+
+                val chat = generativeModel.startChat(history = history)
+                val response = chat.sendMessage(userQuery)
+                val responseText = response.text ?: "I couldn't generate a response."
+
+                val updatedMessages = _uiState.value.messages.toMutableList()
+                updatedMessages.add(ChatMessage(responseText, false))
+                _uiState.update { it.copy(messages = updatedMessages, isAwaitingResponse = false) }
+
+            } catch (e: Exception) {
+                Log.e("AiHelpViewModel", "Gemini API Error", e)
+                val errorMessage = e.localizedMessage ?: "Unknown error"
+                val updatedMessages = _uiState.value.messages.toMutableList()
+
+                val displayError = when {
+                    errorMessage.contains("API Key") -> "Configuration Error: API Key missing."
+                    errorMessage.contains("401") -> "Authentication Error: Invalid API Key."
+                    errorMessage.contains("Unable to resolve host") -> "No Internet Connection. Try sending SMS to your contacts."
+                    errorMessage.contains("not found") -> "Model not found. Please check API settings."
+                    else -> "Connection error: $errorMessage"
+                }
+
+                updatedMessages.add(ChatMessage(displayError, false))
+                _uiState.update { it.copy(messages = updatedMessages, isAwaitingResponse = false) }
+            }
         }
     }
 
@@ -106,29 +202,22 @@ class AiHelpViewModel @Inject constructor(
             }
         }
     }
-    
+
     private fun resolveEmergency() {
         viewModelScope.launch {
             val alertId = currentAlertId
             if (alertId != null) {
-                 // Call the backend to resolve
-                 val result = sosRepository.updateSosStatus(alertId, "resolved")
-                 
-                 if (result.isSuccess) {
-                     Log.d("AiHelpViewModel", "Emergency resolved successfully on server.")
-                     _uiState.update { it.copy(emergencyStopped = true) }
-                 } else {
-                     // If server fails (e.g. 400 Bad Request due to notification bug),
-                     // we log it but assume the user is safe and wants to exit.
-                     // The DB update likely happened before the notification crash.
-                     val errorMsg = result.exceptionOrNull()?.message ?: "Unknown error"
-                     Log.e("AiHelpViewModel", "Server update failed (ignoring for UX): $errorMsg")
-                     
-                     // Exit immediately, treating it as a success for the user
-                     _uiState.update { it.copy(emergencyStopped = true) }
-                 }
+                val result = sosRepository.updateSosStatus(alertId, "resolved")
+
+                if (result.isSuccess) {
+                    Log.d("AiHelpViewModel", "Emergency resolved successfully on server.")
+                    _uiState.update { it.copy(emergencyStopped = true) }
+                } else {
+                    val errorMsg = result.exceptionOrNull()?.message ?: "Unknown error"
+                    Log.e("AiHelpViewModel", "Server update failed (ignoring for UX): $errorMsg")
+                    _uiState.update { it.copy(emergencyStopped = true) }
+                }
             } else {
-                // No alert ID found, just close screen
                 Log.w("AiHelpViewModel", "No active alert ID found to resolve.")
                 _uiState.update { it.copy(emergencyStopped = true) }
             }

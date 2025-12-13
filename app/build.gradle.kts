@@ -85,6 +85,12 @@ dependencies {
     // Material
     implementation("androidx.compose.material:material-icons-extended-android:1.6.7")
 
+    // Gemini AI
+    implementation(libs.google.generativeai)
+
+    // Accompanist Permissions for runtime permission handling
+    implementation("com.google.accompanist:accompanist-permissions:0.35.0-alpha")
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
