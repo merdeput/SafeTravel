@@ -22,7 +22,9 @@ import com.safetravel.app.R
 import com.safetravel.app.data.repository.AuthRepository
 import com.safetravel.app.data.repository.LocationService
 import com.safetravel.app.data.repository.SensorDataRepository
+import com.safetravel.app.data.repository.SettingsRepository
 import com.safetravel.app.data.repository.SosRepository
+import com.safetravel.app.ui.sos.EmergencyActivity
 import com.safetravel.app.ui.sos.data.ActivityHint
 import com.safetravel.app.ui.sos.detector.ContextSnapshot
 import com.safetravel.app.ui.sos.detector.AccidentDetector
@@ -36,6 +38,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -58,6 +61,9 @@ class BackgroundSafetyService : Service(), SensorEventListener {
 
     @Inject
     lateinit var authRepository: AuthRepository
+    
+    @Inject
+    lateinit var settingsRepository: SettingsRepository
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -260,18 +266,19 @@ class BackgroundSafetyService : Service(), SensorEventListener {
             }
         )
 
-        val pendingIntent: PendingIntent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
+        val pendingIntent: PendingIntent = Intent(this, EmergencyActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }.let { notificationIntent ->
             PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE)
         }
 
         val notification = NotificationCompat.Builder(this, channelId)
             .setContentTitle("ACCIDENT DETECTED")
-            .setContentText("Sending help in 30 seconds. Tap to cancel.")
+            .setContentText("Tap to cancel or view emergency info.")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setContentIntent(pendingIntent)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setFullScreenIntent(pendingIntent, true) // This wakes up the screen and launches activity
             .setAutoCancel(true)
             .build()
 
@@ -284,7 +291,10 @@ class BackgroundSafetyService : Service(), SensorEventListener {
     private fun startAlertCountdown(message: String) {
         alertCountdownJob?.cancel()
         alertCountdownJob = serviceScope.launch {
-            delay(30000) // 30 seconds delay
+            val settings = settingsRepository.settingsFlow.first()
+            val countdown = settings.countdownTime.toLong() * 1000
+            
+            delay(countdown) // User configured delay
             
             // Stop vibration before sending alert (or keep it going until user dismisses?)
             // Usually we stop it when the action is taken or dismissed. 
@@ -326,19 +336,20 @@ class BackgroundSafetyService : Service(), SensorEventListener {
             }
         )
 
-        val pendingIntent: PendingIntent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
+        val pendingIntent: PendingIntent = Intent(this, EmergencyActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }.let { notificationIntent ->
             PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE)
         }
 
         val notification = NotificationCompat.Builder(this, channelId)
             .setContentTitle("FALL DETECTED")
-            .setContentText("A fall was detected. Sending help in 30 seconds. Tap if you are okay.")
+            .setContentText("A fall was detected. Tap to cancel or view info.")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
-            .setContentIntent(pendingIntent)
+            .setFullScreenIntent(pendingIntent, true) // Wake up screen and launch activity
             .setAutoCancel(true)
             .build()
 

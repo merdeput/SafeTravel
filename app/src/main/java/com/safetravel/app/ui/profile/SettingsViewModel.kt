@@ -3,6 +3,7 @@ package com.safetravel.app.ui.profile
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.safetravel.app.data.repository.AuthRepository
+import com.safetravel.app.data.repository.EmergencyInfo
 import com.safetravel.app.data.repository.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,7 +15,8 @@ import javax.inject.Inject
 
 data class SettingsUiState(
     val countdownTime: Int = 30,
-    val passcode: String = "1234"
+    val passcode: String = "",
+    val emergencyInfo: EmergencyInfo = EmergencyInfo()
 )
 
 @HiltViewModel
@@ -28,26 +30,35 @@ class SettingsViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            // Load initial settings from DataStore
-            val settings = settingsRepository.settingsFlow.first()
-            _uiState.update {
-                it.copy(
-                    countdownTime = settings.countdownTime,
-                    passcode = settings.passcode
-                )
+            settingsRepository.settingsFlow.collect { settings ->
+                _uiState.update { 
+                    it.copy(
+                        countdownTime = settings.countdownTime,
+                        passcode = settings.passcode,
+                        emergencyInfo = settings.emergencyInfo
+                    ) 
+                }
             }
         }
     }
 
-    fun onCountdownTimeChange(newTime: String) {
-        val time = newTime.toIntOrNull() ?: 30
-        _uiState.update { it.copy(countdownTime = time) }
-        viewModelScope.launch { settingsRepository.saveCountdownTime(time) }
+    fun onCountdownTimeChange(newValue: String) {
+        val time = newValue.toIntOrNull() ?: return
+        viewModelScope.launch {
+            settingsRepository.saveCountdownTime(time)
+        }
     }
 
-    fun onPasscodeChange(newPasscode: String) {
-        _uiState.update { it.copy(passcode = newPasscode) }
-        viewModelScope.launch { settingsRepository.savePasscode(newPasscode) }
+    fun onPasscodeChange(newValue: String) {
+        viewModelScope.launch {
+            settingsRepository.savePasscode(newValue)
+        }
+    }
+    
+    fun onEmergencyInfoChange(newInfo: EmergencyInfo) {
+        viewModelScope.launch {
+            settingsRepository.saveEmergencyInfo(newInfo)
+        }
     }
 
     fun logout() {

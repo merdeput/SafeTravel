@@ -23,6 +23,7 @@ import com.safetravel.app.ui.createtrip.CreateTripViewModel
 import com.safetravel.app.ui.createtrip.LocationPickerScreen
 import com.safetravel.app.ui.login.LoginScreen
 import com.safetravel.app.ui.login.RegisterScreen
+import com.safetravel.app.ui.profile.EmergencyInfoScreen
 import com.safetravel.app.ui.profile.SettingsScreen
 import com.safetravel.app.ui.sos.AiHelpScreen
 import com.safetravel.app.ui.sos.SosAlertsScreen
@@ -151,9 +152,16 @@ fun AppNavigation(startDestination: String) {
         composable("settings") {
             SettingsScreen(
                 onNavigateUp = { navController.popBackStack() },
+                onNavigateToEmergencyInfo = { navController.navigate("emergency_info") },
                 onLogout = {
                     navController.navigate("login") { popUpTo(0) { inclusive = true } }
                 }
+            )
+        }
+        
+        composable("emergency_info") {
+            EmergencyInfoScreen(
+                onNavigateUp = { navController.popBackStack() }
             )
         }
 

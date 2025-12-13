@@ -1,13 +1,16 @@
 package com.safetravel.app.ui.profile
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.MedicalInformation
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Warning
@@ -27,6 +30,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
     onNavigateUp: () -> Unit,
+    onNavigateToEmergencyInfo: () -> Unit, // New callback
     onLogout: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -87,6 +91,19 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+                )
+            }
+            
+            // --- Emergency Information ---
+            SettingsSection(title = "Emergency Profile", icon = Icons.Default.MedicalInformation) {
+                ListItem(
+                    headlineContent = { Text("Emergency Information") },
+                    supportingContent = { Text("Medical details & contact for emergency lock screen") },
+                    leadingContent = { Icon(Icons.Default.MedicalInformation, contentDescription = null) },
+                    trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = null) },
+                    modifier = Modifier
+                        .clickable { onNavigateToEmergencyInfo() }
+                        .fillMaxWidth()
                 )
             }
 
