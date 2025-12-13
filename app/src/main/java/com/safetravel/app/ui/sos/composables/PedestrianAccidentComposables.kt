@@ -41,6 +41,7 @@ import com.safetravel.app.ui.sos.data.DetectionState
 import com.safetravel.app.ui.sos.data.DetectionStateEnum
 import java.text.SimpleDateFormat
 import java.util.Locale
+import android.os.SystemClock
 import kotlin.math.max
 
 @Composable
@@ -139,6 +140,11 @@ fun CalculationsCard(state: DetectionState) {
             SectionHeader("Context")
             MetricRow("Speed", String.format("%.2f m/s", state.speedMps))
             MetricRow("Speed delta", String.format("%.2f m/s", state.speedDeltaMps))
+            MetricRow(
+                "Speed drop",
+                if (state.hasSpeedDrop) "YES (${String.format("%.1f%%", state.speedDropPercent)})"
+                else String.format("%.1f%%", state.speedDropPercent)
+            )
             MetricRow("Activity Hint", state.activityHint.name)
 
             Divider(Modifier.padding(vertical = 12.dp))
@@ -171,6 +177,7 @@ fun CalculationsCard(state: DetectionState) {
             MetricRow("wy", String.format("%.3f rad/s", state.gyroY))
             MetricRow("wz", String.format("%.3f rad/s", state.gyroZ))
             MetricRow("Magnitude", String.format("%.3f rad/s", state.angularMagnitude), highlight = state.angularMagnitude > 4f)
+            MetricRow("Gyro fresh", if (state.isGyroFresh) "YES" else "NO")
 
             Divider(Modifier.padding(vertical = 12.dp))
 
@@ -207,7 +214,7 @@ fun ThresholdStatusCard(state: DetectionState) {
             ThresholdRow("Angular > 4 rad/s", state.angularMagnitude > 4f)
             ThresholdRow("Orientation > 60 deg", state.orientationChange > 60f)
             ThresholdRow("Duration > 150ms", state.impactDuration > 150)
-            ThresholdRow("Speed drop > 8 m/s", state.speedDeltaMps > 8f)
+            ThresholdRow("Speed drop > 8 m/s or 35%", state.hasSpeedDrop)
 
             Spacer(modifier = Modifier.height(12.dp))
 
@@ -216,7 +223,7 @@ fun ThresholdStatusCard(state: DetectionState) {
                 state.jerk > 100f,
                 state.angularMagnitude > 4f || state.orientationChange > 60f,
                 state.impactDuration > 150,
-                state.speedDeltaMps > 8f
+                state.hasSpeedDrop
             ).count { it }
 
             Text(
@@ -239,15 +246,15 @@ fun PostImpactCard(state: DetectionState) {
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = "Post-Impact Validation",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
+            text = "Post-Impact Validation",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
 
-            Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
-            val elapsed = (System.currentTimeMillis() - state.validationStartTime) / 1000f
-            val remaining = max(0f, 30f - elapsed)
+        val elapsed = (SystemClock.elapsedRealtime() - state.validationStartTime) / 1000f
+        val remaining = max(0f, 30f - elapsed)
 
             Text(
                 text = "Monitoring for stillness and speed drop...",

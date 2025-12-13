@@ -3,6 +3,7 @@ package com.safetravel.app.ui.sos.detector
 import com.safetravel.app.ui.sos.data.ActivityHint
 import com.safetravel.app.ui.sos.data.DetectionState
 import com.safetravel.app.ui.sos.data.DetectionStateEnum
+import android.os.SystemClock
 import kotlin.math.abs
 import kotlin.math.acos
 import kotlin.math.pow
@@ -20,12 +21,13 @@ class AccidentDetector {
         private const val THRESHOLD_MOVEMENT_CANCEL = 6.0f // Movement high enough to cancel alarm (increased)
         private const val THRESHOLD_ORIENTATION_CHANGE = 45.0f // Degrees
         private const val SPEED_DROP_THRESHOLD = 8.0f // m/s drop within window to reinforce crash
+        private const val SPEED_DROP_THRESHOLD_PERCENT = 0.35f // 35% drop relative to recent peak
         private const val SPEED_RECOVERY_THRESHOLD = 5.0f // m/s recovery to cancel bumps
         
         // Timings
         private const val TIME_IMPACT_WINDOW_MS = 3000L // 3 seconds to settle (increased)
         private const val TIME_VALIDATION_WINDOW_MS = 15000L // 15 seconds to confirm (reduced)
-        private const val TIME_GYRO_SYNC_TOLERANCE_MS = 100L // Gyro data must be within 100ms
+        private const val TIME_GYRO_SYNC_TOLERANCE_MS = 200L // Gyro data must be within 200ms
         private const val SPEED_DROP_LOOKBACK_MS = 3000L // Lookback window for speed delta
         
         // Buffer settings
@@ -42,6 +44,8 @@ class AccidentDetector {
     private var currentGravity = FloatArray(3) // The "Now" state (Low-pass filtered)
     private var isReferenceSet = false
     private var isReferenceLocked = false // NEW: Prevents reference updates during detection
+    private data class SpeedSample(val speed: Float, val timestampMs: Long)
+    private val speedHistory = ArrayDeque<SpeedSample>()
     
     // Buffers
     private val accelBuffer = mutableListOf<Float>()
@@ -69,10 +73,10 @@ class AccidentDetector {
     ): DetectionState {
         // --- 1. Physics Calculations ---
         
-        val now = System.currentTimeMillis()
+        val now = SystemClock.elapsedRealtime()
         val speedMps = context.speedMps.coerceAtLeast(0f)
         val activityHint = context.activityHint
-        val (speedDelta, hasSpeedDrop) = updateSpeedContext(speedMps, now)
+        val (speedDelta, hasSpeedDrop, speedDropPercent) = updateSpeedContext(speedMps, now)
         val isVehicleContext = speedMps > 3f || activityHint == ActivityHint.VEHICLE
         val isActiveContext = isVehicleContext || activityHint == ActivityHint.RUNNING || speedMps > 2.5f
 
@@ -155,8 +159,12 @@ class AccidentDetector {
                 val isTumble = tam > tumbleTamThreshold && 
                               gyroMagnitude > gyroThreshold && 
                               isGyroFresh
+                // 3. Speed-drop reinforced: moderate TAM with meaningful recent speed drop
+                val isSpeedReinforcedImpact = hasSpeedDrop &&
+                        tam > tamThreshold * 0.65f &&
+                        speedDropPercent > (SPEED_DROP_THRESHOLD_PERCENT * 100)
                 
-                if (isHardImpact || isTumble) {
+                if (isHardImpact || isTumble || isSpeedReinforcedImpact) {
                     // LOCK the reference gravity to preserve "before" state
                     isReferenceLocked = true
                     currentState = DetectionStateEnum.POTENTIAL_IMPACT
@@ -202,9 +210,11 @@ class AccidentDetector {
                 // Count significant movements instead of canceling on first movement
                 if (sma > THRESHOLD_MOVEMENT_CANCEL) {
                     significantMovementCount++
-                    
-                    // Only cancel if there are multiple sustained movements
-                    if (significantMovementCount >= movementThreshold) {
+                    val canCancelForMovement = speedMps > SPEED_RECOVERY_THRESHOLD &&
+                            orientationChange < 25f &&
+                            !hasSpeedDrop
+                    // Only cancel if there are multiple sustained movements AND context looks recovered
+                    if (significantMovementCount >= movementThreshold && canCancelForMovement) {
                         resetToMonitoring()
                     }
                 } else {
@@ -255,7 +265,10 @@ class AccidentDetector {
             currentState = currentState,
             speedMps = speedMps,
             speedDelta = speedDelta,
-            activityHint = activityHint
+            hasSpeedDrop = hasSpeedDrop,
+            speedDropPercent = speedDropPercent,
+            activityHint = activityHint,
+            isGyroFresh = isGyroFresh
         )
     }
     
@@ -281,22 +294,29 @@ class AccidentDetector {
         impactStartTime = 0L
         validationStartTime = 0L
         isReferenceLocked = false // Unlock reference for new baseline
+        isReferenceSet = false
+        referenceGravity = FloatArray(3) { 0f }
         maxBufferSize = BUFFER_SIZE_NORMAL // Restore normal buffer size
         accelBuffer.clear() // Clean slate
         significantMovementCount = 0
+        speedHistory.clear()
     }
 
-    private fun updateSpeedContext(speedMps: Float, nowMs: Long): Pair<Float, Boolean> {
-        val delta = if (lastSpeedTimestampMs > 0 && nowMs - lastSpeedTimestampMs < SPEED_DROP_LOOKBACK_MS) {
-            lastSpeedMps - speedMps
-        } else {
-            0f
+    private fun updateSpeedContext(speedMps: Float, nowMs: Long): Triple<Float, Boolean, Float> {
+        speedHistory.addLast(SpeedSample(speedMps, nowMs))
+        while (speedHistory.isNotEmpty() && nowMs - speedHistory.first().timestampMs > SPEED_DROP_LOOKBACK_MS) {
+            speedHistory.removeFirst()
         }
+
+        val recentPeak = speedHistory.maxOfOrNull { it.speed } ?: speedMps
+        val delta = (recentPeak - speedMps).coerceAtLeast(0f)
+        val dropPercent = if (recentPeak > 0.5f) (delta / recentPeak) * 100f else 0f
+        val hasMeaningfulDrop = delta > SPEED_DROP_THRESHOLD || dropPercent > (SPEED_DROP_THRESHOLD_PERCENT * 100)
 
         lastSpeedMps = speedMps
         lastSpeedTimestampMs = nowMs
 
-        return delta to (delta > SPEED_DROP_THRESHOLD)
+        return Triple(delta, hasMeaningfulDrop, dropPercent)
     }
 
     private fun scaledThreshold(base: Float, speedMps: Float): Float {
@@ -319,7 +339,10 @@ class AccidentDetector {
         currentState: DetectionStateEnum,
         speedMps: Float,
         speedDelta: Float,
-        activityHint: ActivityHint
+        hasSpeedDrop: Boolean,
+        speedDropPercent: Float,
+        activityHint: ActivityHint,
+        isGyroFresh: Boolean
     ): DetectionState {
         return DetectionState(
             accelX = values[0],
@@ -342,7 +365,10 @@ class AccidentDetector {
             impactDuration = impactDuration,
             currentState = currentState,
             accidentConfirmed = currentState == DetectionStateEnum.CONFIRMED_ACCIDENT,
-            validationStartTime = validationStartTime
+            validationStartTime = validationStartTime,
+            hasSpeedDrop = hasSpeedDrop,
+            speedDropPercent = speedDropPercent,
+            isGyroFresh = isGyroFresh
         )
     }
     

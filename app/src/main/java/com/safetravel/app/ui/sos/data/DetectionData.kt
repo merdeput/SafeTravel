@@ -23,7 +23,10 @@ data class DetectionState(
     val impactDuration: Long = 0L,
     val currentState: DetectionStateEnum = DetectionStateEnum.IDLE,
     val accidentConfirmed: Boolean = false,
-    val validationStartTime: Long = 0L
+    val validationStartTime: Long = 0L,
+    val hasSpeedDrop: Boolean = false,
+    val speedDropPercent: Float = 0f,
+    val isGyroFresh: Boolean = false
 )
 
 enum class DetectionStateEnum {
