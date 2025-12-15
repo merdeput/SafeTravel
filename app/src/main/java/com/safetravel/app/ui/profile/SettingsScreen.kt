@@ -1,5 +1,6 @@
 package com.safetravel.app.ui.profile
 
+import android.content.Intent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -12,6 +13,7 @@ import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MedicalInformation
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Preview
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
@@ -19,11 +21,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.safetravel.app.ui.sos.EmergencyActivity
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,6 +38,7 @@ fun SettingsScreen(
     onLogout: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
 
     Scaffold(
         topBar = {
@@ -103,6 +108,24 @@ fun SettingsScreen(
                     trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = null) },
                     modifier = Modifier
                         .clickable { onNavigateToEmergencyInfo() }
+                        .fillMaxWidth()
+                )
+                
+                Divider(modifier = Modifier.padding(horizontal = 16.dp))
+                
+                // Test Lock Screen Button
+                ListItem(
+                    headlineContent = { Text("Preview Lock Screen") },
+                    supportingContent = { Text("Test the emergency card display") },
+                    leadingContent = { Icon(Icons.Default.Preview, contentDescription = null) },
+                    trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = null) },
+                    modifier = Modifier
+                        .clickable { 
+                            val intent = Intent(context, EmergencyActivity::class.java).apply {
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                            }
+                            context.startActivity(intent)
+                        }
                         .fillMaxWidth()
                 )
             }

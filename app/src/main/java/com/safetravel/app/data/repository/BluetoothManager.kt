@@ -18,6 +18,7 @@ import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.nio.charset.Charset
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -33,7 +34,7 @@ class BluetoothBleManager @Inject constructor(
     private var scanner: BluetoothLeScanner? = null
     
     // UUID for SafeTravel SOS
-    private val SERVICE_UUID = ParcelUuid(UUID.fromString("0000180F-0000-1000-8000-00805f9b34fb")) 
+    private val SERVICE_UUID = ParcelUuid(UUID.fromString("25AE1441-05D3-4C5B-8281-93D4E07420CF")) 
 
     private val _isAdvertising = MutableStateFlow(false)
     val isAdvertising = _isAdvertising.asStateFlow()
@@ -55,16 +56,38 @@ class BluetoothBleManager @Inject constructor(
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult?) {
             result?.let {
-                val address = it.device.address
-                val rssi = it.rssi
-                Log.d("BluetoothBleManager", "Found SOS Signal: $address, RSSI: $rssi")
-                scanRepository.addOrUpdateSignal(address, rssi)
+                val scanRecord = it.scanRecord ?: return@let
+                
+                // Strictly verify that the device has our specific Service UUID or Service Data
+                val hasServiceUuid = scanRecord.serviceUuids?.contains(SERVICE_UUID) == true
+                val serviceData = scanRecord.getServiceData(SERVICE_UUID)
+                val hasServiceData = serviceData != null
+                
+                if (hasServiceUuid || hasServiceData) {
+                    val address = it.device.address
+                    val rssi = it.rssi
+                    
+                    var message: String? = null
+                    if (serviceData != null) {
+                        message = String(serviceData, Charset.forName("UTF-8"))
+                    }
+
+                    Log.d("BluetoothBleManager", "Found SafeTravel SOS: $address, RSSI: $rssi, Msg: $message")
+                    scanRepository.addOrUpdateSignal(address, rssi, message)
+                }
             }
         }
 
         override fun onBatchScanResults(results: MutableList<ScanResult>?) {
-            results?.forEach {
-                scanRepository.addOrUpdateSignal(it.device.address, it.rssi)
+            results?.forEach { result ->
+                val scanRecord = result.scanRecord ?: return@forEach
+                val hasServiceUuid = scanRecord.serviceUuids?.contains(SERVICE_UUID) == true
+                val serviceData = scanRecord.getServiceData(SERVICE_UUID)
+                
+                if (hasServiceUuid || serviceData != null) {
+                    val message = serviceData?.let { bytes -> String(bytes, Charset.forName("UTF-8")) }
+                    scanRepository.addOrUpdateSignal(result.device.address, result.rssi, message)
+                }
             }
         }
 
@@ -75,7 +98,7 @@ class BluetoothBleManager @Inject constructor(
     }
 
     @SuppressLint("MissingPermission")
-    fun startAdvertising() {
+    fun startAdvertising(message: String = "SOS!") {
         if (adapter == null || !adapter.isEnabled) {
             Log.e("BluetoothBleManager", "Bluetooth is off or not supported")
             return
@@ -93,9 +116,17 @@ class BluetoothBleManager @Inject constructor(
             .setConnectable(false)
             .build()
 
+        // Truncate message to fit (keep it short for BLE packet limits)
+        val safeMessage = message.take(8)
+        val messageBytes = safeMessage.toByteArray(Charset.forName("UTF-8"))
+
         val data = AdvertiseData.Builder()
             .setIncludeDeviceName(false)
-            .addServiceUuid(SERVICE_UUID)
+            // Put message in Service Data associated with our UUID
+            // We DO NOT add addServiceUuid(SERVICE_UUID) here because that would duplicate the 16-byte UUID 
+            // in the packet, causing it to exceed the 31-byte legacy limit.
+            // Scanners must scan for Service Data, not just Service UUID list.
+            .addServiceData(SERVICE_UUID, messageBytes)
             .build()
 
         try {
@@ -133,9 +164,10 @@ class BluetoothBleManager @Inject constructor(
              return
         }
         
+        // Filter by Service Data since that's where we put our UUID in the advertisement
         val filters = listOf(
             ScanFilter.Builder()
-                .setServiceUuid(SERVICE_UUID)
+                .setServiceData(SERVICE_UUID, null) // Match any data as long as UUID matches
                 .build()
         )
         

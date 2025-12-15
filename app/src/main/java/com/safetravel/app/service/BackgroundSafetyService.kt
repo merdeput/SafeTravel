@@ -20,6 +20,7 @@ import androidx.core.app.NotificationCompat
 import com.safetravel.app.MainActivity
 import com.safetravel.app.R
 import com.safetravel.app.data.repository.AuthRepository
+import com.safetravel.app.data.repository.BluetoothScanRepository
 import com.safetravel.app.data.repository.LocationService
 import com.safetravel.app.data.repository.SensorDataRepository
 import com.safetravel.app.data.repository.SettingsRepository
@@ -64,6 +65,9 @@ class BackgroundSafetyService : Service(), SensorEventListener {
     
     @Inject
     lateinit var settingsRepository: SettingsRepository
+    
+    @Inject
+    lateinit var bluetoothScanRepository: BluetoothScanRepository
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -83,7 +87,6 @@ class BackgroundSafetyService : Service(), SensorEventListener {
     private var latestSpeedMps = 0f
     private var lastLocation: Location? = null
     private var lastLocationTimestampMs: Long = 0L
-    private var lastLocationElapsedNanos: Long = 0L
     private var latestActivityHint: ActivityHint = ActivityHint.UNKNOWN
 
     // Channel to process sensor events sequentially and avoid concurrency issues
@@ -147,6 +150,13 @@ class BackgroundSafetyService : Service(), SensorEventListener {
                         showAccidentAlertNotification()
                     }
                 }
+            }
+            .launchIn(serviceScope)
+            
+        // Observe Bluetooth SOS signals
+        bluetoothScanRepository.newSignalDetected
+            .onEach { signal ->
+                showBluetoothHearingNotification(signal.message ?: "Unknown", signal.rssi)
             }
             .launchIn(serviceScope)
     }
@@ -389,9 +399,37 @@ class BackgroundSafetyService : Service(), SensorEventListener {
 
         notificationManager.notify(4, notification)
     }
+    
+    private fun showBluetoothHearingNotification(message: String, rssi: Int) {
+        val channelId = "bluetooth_hearing_channel"
+        val channelName = "SOS Signal Detected"
+        val notificationManager = getSystemService(NotificationManager::class.java)
+        notificationManager.createNotificationChannel(
+            NotificationChannel(channelId, channelName, NotificationManager.IMPORTANCE_HIGH)
+        )
+
+        val pendingIntent: PendingIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra("navigation_route", "bluetooth_hearing")
+        }.let { notificationIntent ->
+            PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        }
+
+        val notification = NotificationCompat.Builder(this, channelId)
+            .setContentTitle("SOS Signal Detected!")
+            .setContentText("Someone nearby needs help: $message ($rssi dBm)")
+            .setSmallIcon(R.mipmap.ic_launcher) // Consider a specific SOS icon
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .build()
+
+        // Use a unique ID based on message or constant if just one general alert
+        notificationManager.notify(5, notification)
+    }
 
     private fun startLocationTracking() {
-        // Request locationx updates every 10 seconds
+        // Request location updates every 10 seconds
         locationService.getLocationUpdates(2000L)
             .onEach { location ->
                 updateSpeedFromLocation(location)
@@ -467,39 +505,21 @@ class BackgroundSafetyService : Service(), SensorEventListener {
 
     private fun updateSpeedFromLocation(location: Location) {
         val nowMs = System.currentTimeMillis()
-        val nowElapsedNanos = location.elapsedRealtimeNanos
-        val isAccurateFix = location.hasAccuracy() && location.accuracy <= 30f
-
-        val speedFromProvider = if (location.hasSpeed()) {
-            val hasTightSpeedAccuracy = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                location.hasSpeedAccuracy() && location.speedAccuracyMetersPerSecond <= 1.5f
-            } else {
-                true
-            }
-            if (isAccurateFix && hasTightSpeedAccuracy) location.speed else Float.NaN
-        } else {
-            Float.NaN
-        }
-
-        val computedSpeed = if (!speedFromProvider.isNaN()) {
-            speedFromProvider
+        val computedSpeed = if (location.hasSpeed()) {
+            location.speed
         } else {
             val lastLoc = lastLocation
-            val lastElapsed = lastLocationElapsedNanos
-            if (lastLoc != null && lastElapsed > 0L) {
+            if (lastLoc != null) {
                 val distance = lastLoc.distanceTo(location) // meters
-                val elapsedNanos = (nowElapsedNanos - lastElapsed).coerceAtLeast(1_000_000L)
-                val timeDeltaSec = elapsedNanos / 1_000_000_000f
-                if (timeDeltaSec > 0f) distance / timeDeltaSec else 0f
+                val timeDeltaSec = ((nowMs - lastLocationTimestampMs).coerceAtLeast(1L)) / 1000f
+                distance / timeDeltaSec
             } else {
                 0f
             }
         }
-
         latestSpeedMps = computedSpeed.coerceAtLeast(0f)
         lastLocation = location
         lastLocationTimestampMs = nowMs
-        lastLocationElapsedNanos = nowElapsedNanos
         latestActivityHint = inferActivityHint(latestSpeedMps)
     }
 

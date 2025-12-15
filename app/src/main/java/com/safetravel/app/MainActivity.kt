@@ -1,14 +1,19 @@
 package com.safetravel.app
 
+import android.app.Activity
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.core.util.Consumer
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -51,11 +56,54 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+    
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+    }
 }
 
 @Composable
 fun AppNavigation(startDestination: String) {
     val navController = rememberNavController()
+    val context = LocalContext.current
+
+    // Handle deep links from Notifications (e.g. Bluetooth Hearing)
+    LaunchedEffect(Unit) {
+        val activity = context as? Activity
+        val intent = activity?.intent
+        
+        // Check for navigation route extra
+        val route = intent?.getStringExtra("navigation_route")
+        if (route == "bluetooth_hearing") {
+            navController.navigate("bluetooth_hearing") {
+                // Ensure we don't build up a huge stack
+                popUpTo("main_app") { saveState = true }
+                launchSingleTop = true
+            }
+            // Clear the extra so rotation/recreation doesn't re-trigger navigation
+            intent.removeExtra("navigation_route")
+        }
+    }
+    
+    // Also listen for new intents if the activity is already running
+    DisposableEffect(Unit) {
+        val listener = Consumer<Intent> { intent ->
+            val route = intent.getStringExtra("navigation_route")
+            if (route == "bluetooth_hearing") {
+                navController.navigate("bluetooth_hearing") {
+                    popUpTo("main_app") { saveState = true }
+                    launchSingleTop = true
+                }
+                intent.removeExtra("navigation_route")
+            }
+        }
+        val activity = context as? ComponentActivity
+        activity?.addOnNewIntentListener(listener)
+        onDispose {
+            activity?.removeOnNewIntentListener(listener)
+        }
+    }
 
     NavHost(navController = navController, startDestination = startDestination) {
 
