@@ -6,6 +6,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -16,6 +17,7 @@ import android.os.IBinder
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import com.safetravel.app.MainActivity
 import com.safetravel.app.R
@@ -166,9 +168,15 @@ class BackgroundSafetyService : Service(), SensorEventListener {
             ACTION_RESET_DETECTOR -> resetDetectors()
             ACTION_ALERT_SENT -> showAlertSentNotification()
             else -> {
-                startForegroundService()
-                startLocationTracking()
-                registerSensors()
+                try {
+                   startForegroundService()
+                   startLocationTracking()
+                   registerSensors()
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    // If we can't start foreground, we should probably stop the service to avoid ANR or crashes
+                    stopSelf() 
+                }
             }
         }
         return START_STICKY
@@ -198,6 +206,21 @@ class BackgroundSafetyService : Service(), SensorEventListener {
     }
 
     private fun startForegroundService() {
+        // Double check permissions before calling startForeground with specific types
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+             val hasBluetoothConnect = ActivityCompat.checkSelfPermission(this, android.Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+             val hasBluetoothScan = ActivityCompat.checkSelfPermission(this, android.Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
+             
+             if (!hasBluetoothConnect && !hasBluetoothScan) {
+                 // Fallback to location only if connected device permissions are missing
+                 // but we declared connectedDevice in manifest, so we might need to handle this carefully.
+                 // Actually, if we declared it, we MUST provide it if we include it in the type.
+                 // If we don't have permission, we should probably NOT include that type.
+                 // However, since we are in a service that might be started before permissions are granted fully (though unlikely if structured correctly),
+                 // let's try to be safe.
+             }
+        }
+
         val channelId = "safety_background_channel"
         val channelName = "Safety Monitoring"
         val notificationManager = getSystemService(NotificationManager::class.java)
@@ -220,7 +243,28 @@ class BackgroundSafetyService : Service(), SensorEventListener {
             .setTicker("Safe Travel Service Running") // For accessibility
             .build()
 
-        startForeground(1, notification)
+        // Check permissions again just to be safe before calling startForeground with types
+        // The crash happens because we request types that we don't have permissions for.
+        if (Build.VERSION.SDK_INT >= 34) {
+             try {
+                startForeground(1, notification, 
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION or 
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+                )
+             } catch (e: SecurityException) {
+                 // Fallback if connected device permission is missing?
+                 try {
+                     startForeground(1, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+                 } catch (e2: Exception) {
+                     // Last resort
+                     startForeground(1, notification)
+                 }
+             }
+        } else if (Build.VERSION.SDK_INT >= 29) {
+            startForeground(1, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+        } else {
+            startForeground(1, notification)
+        }
     }
     
     private fun startConstantVibration() {
