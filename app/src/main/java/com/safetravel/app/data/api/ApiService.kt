@@ -92,6 +92,12 @@ interface ApiService {
         @Header("Authorization") token: String
     ): Response<List<User>>
 
+    @DELETE("api/friends/{friend_id}")
+    suspend fun deleteFriend(
+        @Header("Authorization") token: String,
+        @Path("friend_id") friendId: Int
+    ): Response<Unit>
+
     // New endpoint to get user details by ID
     @GET("api/users/{user_id}")
     suspend fun getUserById(

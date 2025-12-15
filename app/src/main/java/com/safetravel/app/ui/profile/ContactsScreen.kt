@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -41,9 +42,6 @@ fun ContactsScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        // TopBar removed as it is handled in MainAppScreen
-        // But we want to allow adding friend easily. 
-        // We will add a nice "Add Friend" card at the top.
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -142,7 +140,14 @@ fun ContactsScreen(
                     }
                 } else {
                      items(uiState.friends.size) { index ->
-                        FriendItem(uiState.friends[index])
+                        FriendItem(
+                            friend = uiState.friends[index],
+                            onDelete = {
+                                uiState.friends[index].id?.let { id ->
+                                    viewModel.deleteFriend(id)
+                                }
+                            }
+                        )
                     }
                 }
                 
@@ -217,7 +222,7 @@ private fun FriendRequestItem(request: FriendRequest, onAccept: () -> Unit, onRe
 }
 
 @Composable
-private fun FriendItem(friend: User) {
+private fun FriendItem(friend: User, onDelete: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(), 
         shape = RoundedCornerShape(16.dp),
@@ -236,12 +241,19 @@ private fun FriendItem(friend: User) {
                 }
             }
             Spacer(modifier = Modifier.width(16.dp))
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 val displayName = friend.fullName ?: friend.username ?: "Unknown"
                 Text(displayName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 if (!friend.fullName.isNullOrEmpty() && !friend.username.isNullOrEmpty()) {
                     Text("@${friend.username}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+            }
+            IconButton(onClick = onDelete) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Delete Friend",
+                    tint = MaterialTheme.colorScheme.error
+                )
             }
         }
     }

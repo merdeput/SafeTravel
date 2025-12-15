@@ -196,6 +196,18 @@ class ContactsViewModel @Inject constructor(
         }
     }
     
+    fun deleteFriend(friendId: Int) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            val result = friendRepository.deleteFriend(friendId)
+            if (result.isSuccess) {
+                loadData()
+            } else {
+                _uiState.update { it.copy(isLoading = false, error = result.exceptionOrNull()?.message) }
+            }
+        }
+    }
+    
     fun clearError() {
         _uiState.update { it.copy(error = null) }
     }
