@@ -84,6 +84,19 @@ class FriendRepository @Inject constructor(
         }
     }
     
+    suspend fun deleteFriend(friendId: Int): Result<Unit> {
+        return try {
+            val response = apiService.deleteFriend(getToken(), friendId)
+            if (response.isSuccessful) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception("Failed to delete friend: ${response.code()}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
     suspend fun getUserById(userId: Int): Result<User> {
         return try {
             val response = apiService.getUserById(getToken(), userId)
