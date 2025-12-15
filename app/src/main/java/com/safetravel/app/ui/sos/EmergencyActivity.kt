@@ -11,11 +11,11 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BluetoothDisabled
+import androidx.compose.material.icons.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.safetravel.app.data.repository.SettingsRepository
 import com.safetravel.app.ui.theme.BeeTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -58,7 +59,13 @@ class EmergencyActivity : ComponentActivity() {
 
         setContent {
             BeeTheme {
-                EmergencyCardScreen(settingsRepository = settingsRepository, onDismiss = { finish() })
+                // Using Hilt to inject ViewModel into the composable tree
+                val viewModel: AiHelpViewModel = hiltViewModel()
+                EmergencyCardScreen(
+                    settingsRepository = settingsRepository,
+                    viewModel = viewModel,
+                    onDismiss = { finish() }
+                )
             }
         }
     }
@@ -67,69 +74,89 @@ class EmergencyActivity : ComponentActivity() {
 @Composable
 fun EmergencyCardScreen(
     settingsRepository: SettingsRepository,
+    viewModel: AiHelpViewModel,
     onDismiss: () -> Unit
 ) {
     // Collecting settings from DataStore
     val settings by settingsRepository.settingsFlow.collectAsState(initial = null)
     val info = settings?.emergencyInfo
+    val uiState by viewModel.uiState.collectAsState()
 
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.errorContainer
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Icon(
-                imageVector = Icons.Default.Warning,
-                contentDescription = "Emergency",
-                tint = MaterialTheme.colorScheme.error,
-                modifier = Modifier.size(64.dp)
-            )
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            Text(
-                text = "EMERGENCY INFO",
-                style = MaterialTheme.typography.headlineLarge,
-                color = MaterialTheme.colorScheme.onErrorContainer,
-                fontWeight = FontWeight.Bold
-            )
-            
-            Spacer(modifier = Modifier.height(32.dp))
-            
-            if (info != null) {
-                EmergencyInfoItem(label = "Name", value = info.name)
-                EmergencyInfoItem(label = "Blood Type", value = info.bloodType)
-                EmergencyInfoItem(label = "Allergies", value = info.allergies)
-                EmergencyInfoItem(label = "Conditions", value = info.conditions)
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Warning,
+                    contentDescription = "Emergency",
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(64.dp)
+                )
                 
-                Divider(modifier = Modifier.padding(vertical = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                Spacer(modifier = Modifier.height(16.dp))
                 
                 Text(
-                    text = "Emergency Contact",
-                    style = MaterialTheme.typography.titleMedium,
+                    text = "EMERGENCY INFO",
+                    style = MaterialTheme.typography.headlineLarge,
                     color = MaterialTheme.colorScheme.onErrorContainer,
                     fontWeight = FontWeight.Bold
                 )
-                EmergencyInfoItem(label = "Name", value = info.contactName)
-                EmergencyInfoItem(label = "Phone", value = info.contactPhone)
-            } else {
-                CircularProgressIndicator(color = MaterialTheme.colorScheme.error)
+                
+                Spacer(modifier = Modifier.height(32.dp))
+                
+                if (info != null) {
+                    EmergencyInfoItem(label = "Name", value = info.name)
+                    EmergencyInfoItem(label = "Blood Type", value = info.bloodType)
+                    EmergencyInfoItem(label = "Allergies", value = info.allergies)
+                    EmergencyInfoItem(label = "Conditions", value = info.conditions)
+                    
+                    Divider(modifier = Modifier.padding(vertical = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                    
+                    Text(
+                        text = "Emergency Contact",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        fontWeight = FontWeight.Bold
+                    )
+                    EmergencyInfoItem(label = "Name", value = info.contactName)
+                    EmergencyInfoItem(label = "Phone", value = info.contactPhone)
+                } else {
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.error)
+                }
+
+                Spacer(modifier = Modifier.height(48.dp))
+
+                Button(
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.fillMaxWidth().height(56.dp)
+                ) {
+                    Text("DISMISS", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                }
             }
 
-            Spacer(modifier = Modifier.height(48.dp))
-
-            Button(
-                onClick = onDismiss,
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                modifier = Modifier.fillMaxWidth().height(56.dp)
+            // Bluetooth Beacon Button at the top right
+            FilledTonalIconButton(
+                onClick = { viewModel.toggleBleAdvertising() },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(16.dp)
+                    .padding(top = 24.dp), // Adjust for system bars if needed
+                colors = IconButtonDefaults.filledTonalIconButtonColors(
+                    containerColor = if (uiState.isAdvertisingBle) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.surfaceVariant,
+                    contentColor = if (uiState.isAdvertisingBle) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onSurfaceVariant
+                )
             ) {
-                Text("DISMISS", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                 val icon = if (uiState.isAdvertisingBle) Icons.Default.BluetoothSearching else Icons.Default.BluetoothDisabled
+                 Icon(icon, contentDescription = "Toggle Bluetooth Beacon")
             }
         }
     }

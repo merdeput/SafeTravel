@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
 import com.safetravel.app.BuildConfig
+import com.safetravel.app.data.repository.BluetoothBleManager
 import com.safetravel.app.data.repository.SettingsRepository
 import com.safetravel.app.data.repository.SosRepository
 import com.safetravel.app.service.BackgroundSafetyService
@@ -31,14 +32,16 @@ data class AiHelpUiState(
     val stopError: String? = null,
     val isRecording: Boolean = false,
     val isSpeaking: Boolean = false,
-    val voiceEnabled: Boolean = true // Toggle for voice features
+    val voiceEnabled: Boolean = true,
+    val isAdvertisingBle: Boolean = false
 )
 
 @HiltViewModel
 class AiHelpViewModel @Inject constructor(
     @ApplicationContext private val appContext: Context,
     private val sosRepository: SosRepository,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val bluetoothBleManager: BluetoothBleManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AiHelpUiState())
@@ -95,6 +98,9 @@ Keep responses under 40 words total. Action over comfort.""")
             messages = listOf(ChatMessage("Help is on the way. How can I assist you while you wait?", false))
         )
         fetchLatestActiveAlert()
+        
+        // Start BLE advertising automatically
+        startBleAdvertising()
     }
 
     private suspend fun getSettings() = settingsRepository.settingsFlow.first()
@@ -112,6 +118,21 @@ Keep responses under 40 words total. Action over comfort.""")
             } else {
                 Log.e("AiHelpViewModel", "Failed to fetch alerts: ${result.exceptionOrNull()?.message}")
             }
+        }
+    }
+    
+    private fun startBleAdvertising() {
+        bluetoothBleManager.startAdvertising()
+        _uiState.update { it.copy(isAdvertisingBle = true) }
+    }
+    
+    fun toggleBleAdvertising() {
+        if (_uiState.value.isAdvertisingBle) {
+            bluetoothBleManager.stopAdvertising()
+            _uiState.update { it.copy(isAdvertisingBle = false) }
+        } else {
+            bluetoothBleManager.startAdvertising()
+            _uiState.update { it.copy(isAdvertisingBle = true) }
         }
     }
 
@@ -197,6 +218,7 @@ Keep responses under 40 words total. Action over comfort.""")
                 _uiState.update { it.copy(passcodeError = null) }
                 sendResetToService()
                 resolveEmergency()
+                bluetoothBleManager.stopAdvertising() // Stop BLE on resolve
             } else {
                 _uiState.update { it.copy(passcodeError = "Invalid passcode.") }
             }
@@ -229,5 +251,12 @@ Keep responses under 40 words total. Action over comfort.""")
             action = BackgroundSafetyService.ACTION_RESET_DETECTOR
         }
         appContext.startService(intent)
+    }
+    
+    override fun onCleared() {
+        super.onCleared()
+        // Ensure advertising stops when ViewModel is cleared/screen closed, 
+        // unless you want it persistent even if user exits app (in which case move control to Service)
+        // For now, let's keep it running unless explicitly stopped via 'resolveEmergency'
     }
 }

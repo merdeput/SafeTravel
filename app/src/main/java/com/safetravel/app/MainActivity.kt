@@ -26,6 +26,7 @@ import com.safetravel.app.ui.login.RegisterScreen
 import com.safetravel.app.ui.profile.EmergencyInfoScreen
 import com.safetravel.app.ui.profile.SettingsScreen
 import com.safetravel.app.ui.sos.AiHelpScreen
+import com.safetravel.app.ui.sos.BluetoothHearingScreen
 import com.safetravel.app.ui.sos.SosAlertsScreen
 import com.safetravel.app.ui.theme.BeeTheme
 import com.safetravel.app.ui.triphistory.TripHistoryScreen
@@ -181,6 +182,12 @@ fun AppNavigation(startDestination: String) {
                 onEmergencyStopped = { 
                     navController.popBackStack("main_app", inclusive = false) 
                 }
+            )
+        }
+        
+        composable("bluetooth_hearing") {
+            BluetoothHearingScreen(
+                onNavigateUp = { navController.popBackStack() }
             )
         }
     }

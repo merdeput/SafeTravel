@@ -391,7 +391,7 @@ class BackgroundSafetyService : Service(), SensorEventListener {
     }
 
     private fun startLocationTracking() {
-        // Request location updates every 10 seconds
+        // Request locationx updates every 10 seconds
         locationService.getLocationUpdates(2000L)
             .onEach { location ->
                 updateSpeedFromLocation(location)

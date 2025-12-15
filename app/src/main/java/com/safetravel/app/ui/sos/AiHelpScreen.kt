@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.speech.tts.TextToSpeech
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -46,7 +47,30 @@ fun AiHelpScreen(
     // Speech Recognition Manager
     val speechRecognizer = remember { SpeechRecognizerManager(context) }
 
-    // Audio Recording Permission handling (without Accompanist)
+    // --- PERMISSION HANDLING (FIX FOR CRASH) ---
+
+    // 1. Determine which permissions are needed based on Android version
+    val requiredPermissions = remember {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // Android 12+ (API 31+) requires specific BLE permissions
+            listOf(
+                Manifest.permission.RECORD_AUDIO,
+                Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.BLUETOOTH_ADVERTISE,
+                Manifest.permission.BLUETOOTH_CONNECT
+            )
+        } else {
+            // Android 11 and below requires Location to use BLE
+            listOf(
+                Manifest.permission.RECORD_AUDIO,
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.BLUETOOTH,
+                Manifest.permission.BLUETOOTH_ADMIN
+            )
+        }
+    }
+
+    // Track audio permission specifically for the Mic button
     var hasAudioPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(
@@ -56,18 +80,33 @@ fun AiHelpScreen(
         )
     }
 
+    // 2. Main Permission Launcher
     val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        hasAudioPermission = isGranted
-        if (isGranted) {
-            // Start recording immediately after permission granted
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        // Update Audio state
+        hasAudioPermission = permissions[Manifest.permission.RECORD_AUDIO] ?: false
+
+        // Check if we can start recording immediately (if user pressed mic button)
+        if (hasAudioPermission && uiState.isRecording) {
             speechRecognizer.startListening { transcription ->
                 viewModel.onTranscriptionReceived(transcription)
             }
-            viewModel.setRecordingState(true)
-        } else {
-            Toast.makeText(context, "Microphone permission is required for voice input", Toast.LENGTH_SHORT).show()
+        }
+
+        // Note: We don't need to explicitly start BLE here; the ViewModel should
+        // handle the BLE toggle safely now that permissions are granted.
+    }
+
+    // 3. Request permissions immediately on screen load to prevent "op=GPS" crash
+    LaunchedEffect(Unit) {
+        // Check if permissions are missing
+        val missingPermissions = requiredPermissions.filter {
+            ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+        }
+
+        if (missingPermissions.isNotEmpty()) {
+            permissionLauncher.launch(requiredPermissions.toTypedArray())
         }
     }
 
@@ -132,7 +171,13 @@ fun AiHelpScreen(
                 .fillMaxSize()
         ) {
             // Quick Actions section
-            EmergencyUtilsSection()
+            EmergencyUtilsSection(
+                isAdvertisingBle = uiState.isAdvertisingBle,
+                onToggleBle = {
+                    // Optional: Check permission again before toggling to be safe
+                    viewModel.toggleBleAdvertising()
+                }
+            )
 
             HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
 
@@ -200,8 +245,8 @@ fun AiHelpScreen(
                                     viewModel.setRecordingState(true)
                                 }
                             } else {
-                                // Request permission
-                                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                // Request permission (re-launch if denied previously)
+                                permissionLauncher.launch(requiredPermissions.toTypedArray())
                             }
                         },
                         containerColor = if (uiState.isRecording)
@@ -350,7 +395,10 @@ private fun AISpeakingIndicator() {
 }
 
 @Composable
-private fun EmergencyUtilsSection() {
+private fun EmergencyUtilsSection(
+    isAdvertisingBle: Boolean,
+    onToggleBle: () -> Unit
+) {
     Column(modifier = Modifier.padding(16.dp)) {
         Text(
             "Quick Actions",
@@ -374,6 +422,31 @@ private fun EmergencyUtilsSection() {
                 icon = Icons.Default.MedicalServices,
                 modifier = Modifier.weight(1f)
             )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Bluetooth Beacon Button
+        Button(
+            onClick = onToggleBle,
+            modifier = Modifier.fillMaxWidth().height(50.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = if (isAdvertisingBle) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = if (isAdvertisingBle) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        ) {
+            val icon = if (isAdvertisingBle) Icons.Default.BluetoothSearching else Icons.Default.BluetoothDisabled
+            val text = if (isAdvertisingBle) "Broadcasting Signal" else "Enable Emergency Beacon"
+
+            if (isAdvertisingBle) {
+                Icon(icon, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(text, fontWeight = FontWeight.Bold)
+            } else {
+                Icon(icon, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(text)
+            }
         }
     }
 }
