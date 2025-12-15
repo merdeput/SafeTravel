@@ -1,10 +1,17 @@
 package com.safetravel.app.ui.trip_live
 
 import android.Manifest
+import android.content.ContentValues
+import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BlurMaskFilter
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -14,9 +21,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -25,12 +35,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
+import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.MapStyleOptions
@@ -38,6 +50,8 @@ import com.google.maps.android.compose.*
 import com.safetravel.app.ui.common.PlacesSearchBar
 import com.safetravel.app.ui.common.SosButtonViewModel
 import com.safetravel.app.ui.common.SosState
+import kotlinx.coroutines.launch
+import java.io.OutputStream
 
 // Map Style JSON (Dark Mode)
 private const val MAP_STYLE_JSON = """[{"elementType":"geometry","stylers":[{"color":"#242f3e"}]},{"elementType":"labels.text.stroke","stylers":[{"color":"#242f3e"}]},{"elementType":"labels.text.fill","stylers":[{"color":"#746855"}]},{"featureType":"administrative.locality","elementType":"labels.text.fill","stylers":[{"color":"#d59563"}]},{"featureType":"poi","elementType":"labels.text.fill","stylers":[{"color":"#d59563"}]},{"featureType":"poi.park","elementType":"geometry","stylers":[{"color":"#263c3f"}]},{"featureType":"poi.park","elementType":"labels.text.fill","stylers":[{"color":"#6b9a76"}]},{"featureType":"road","elementType":"geometry","stylers":[{"color":"#38414e"}]},{"featureType":"road","elementType":"geometry.stroke","stylers":[{"color":"#212a37"}]},{"featureType":"road","elementType":"labels.text.fill","stylers":[{"color":"#9ca5b3"}]},{"featureType":"road.highway","elementType":"geometry","stylers":[{"color":"#746855"}]},{"featureType":"road.highway","elementType":"geometry.stroke","stylers":[{"color":"#1f2835"}]},{"featureType":"road.highway","elementType":"labels.text.fill","stylers":[{"color":"#f3d19c"}]},{"featureType":"transit","elementType":"geometry","stylers":[{"color":"#2f3948"}]},{"featureType":"transit.station","elementType":"labels.text.fill","stylers":[{"color":"#d59563"}]},{"featureType":"water","elementType":"geometry","stylers":[{"color":"#17263c"}]},{"featureType":"water","elementType":"labels.text.fill","stylers":[{"color":"#515c6d"}]},{"featureType":"water","elementType":"labels.text.stroke","stylers":[{"color":"#17263c"}]}]"""
@@ -52,6 +66,11 @@ fun InTripScreen(
     val uiState by viewModel.uiState.collectAsState()
     val sosUiState by sosViewModel.uiState.collectAsState()
     val cameraPositionState = rememberCameraPositionState { position = uiState.cameraPosition }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    // Reference to the underlying GoogleMap object to take snapshots
+    var googleMap by remember { mutableStateOf<GoogleMap?>(null) }
 
     val locationPermissions = rememberMultiplePermissionsState(
         permissions = listOf(Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION)
@@ -194,6 +213,11 @@ fun InTripScreen(
                 uiSettings = MapUiSettings(zoomControlsEnabled = false, myLocationButtonEnabled = false),
                 onMapClick = viewModel::onMapClick
             ) {
+                // Capture the GoogleMap instance
+                MapEffect(Unit) { map ->
+                    googleMap = map
+                }
+
                 // User's Current Location (Glowing Dot)
                 uiState.currentLocation?.let { location ->
                     val userColor = Color(0xFF9E9E9E) // Grey
@@ -214,7 +238,11 @@ fun InTripScreen(
                         Marker(
                             state = MarkerState(position = markerData.position),
                             title = markerData.title,
-                            icon = BitmapDescriptorFactory.defaultMarker()
+                            icon = BitmapDescriptorFactory.defaultMarker(),
+                            onClick = {
+                                viewModel.onMarkerClick(markerData)
+                                false
+                            }
                         )
                     } else {
                         val color = markerData.getColor()
@@ -224,7 +252,11 @@ fun InTripScreen(
                             state = MarkerState(position = markerData.position),
                             title = markerData.title,
                             icon = circleBitmap,
-                            anchor = androidx.compose.ui.geometry.Offset(0.5f, 0.5f)
+                            anchor = androidx.compose.ui.geometry.Offset(0.5f, 0.5f),
+                            onClick = {
+                                viewModel.onMarkerClick(markerData)
+                                false
+                            }
                         )
                     }
                 }
@@ -305,14 +337,93 @@ fun InTripScreen(
                 ) {
                     Icon(Icons.Default.Bluetooth, contentDescription = "SOS Hearing")
                 }
+                
+                // Save Snapshot Button (Offline Map helper)
+                FloatingActionButton(
+                    onClick = {
+                        googleMap?.snapshot { bitmap ->
+                            if (bitmap != null) {
+                                val saved = saveBitmapToGallery(context, bitmap, "SafeTravel_Map_${System.currentTimeMillis()}")
+                                scope.launch {
+                                    if (saved) {
+                                        scaffoldState.snackbarHostState.showSnackbar("Map snapshot saved to Photos")
+                                    } else {
+                                        scaffoldState.snackbarHostState.showSnackbar("Failed to save snapshot")
+                                    }
+                                }
+                            } else {
+                                scope.launch {
+                                    scaffoldState.snackbarHostState.showSnackbar("Could not capture map")
+                                }
+                            }
+                        }
+                    },
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                ) {
+                    Icon(Icons.Default.Download, contentDescription = "Save Offline Snapshot")
+                }
 
                 FloatingActionButton(
-                    // FIXED: Restored 'recenterCamera()' instead of 'onRecenterClick()'
                     onClick = { viewModel.recenterCamera() },
                     containerColor = MaterialTheme.colorScheme.surface,
                     contentColor = MaterialTheme.colorScheme.onSurface
                 ) {
                     Icon(Icons.Default.MyLocation, contentDescription = "Recenter")
+                }
+            }
+            
+            // Marker Selection Info & Actions
+            uiState.selectedMarker?.let { selected ->
+                Card(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 140.dp, start = 16.dp, end = 16.dp) // Above bottom sheet peek
+                        .fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = selected.title,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Type: ${selected.type.name.replace("_", " ")}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            IconButton(onClick = { viewModel.clearSelection() }) {
+                                Icon(Icons.Default.Close, contentDescription = "Close")
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = { 
+                                // Direct to Google Maps
+                                val gmmIntentUri = Uri.parse("google.navigation:q=${selected.position.latitude},${selected.position.longitude}")
+                                val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
+                                mapIntent.setPackage("com.google.android.apps.maps")
+                                
+                                try {
+                                    context.startActivity(mapIntent)
+                                } catch (e: Exception) {
+                                    // Fallback if Google Maps app is not installed
+                                    val browserUri = Uri.parse("https://www.google.com/maps/dir/?api=1&destination=${selected.position.latitude},${selected.position.longitude}")
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, browserUri))
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Navigation, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Navigate with Google Maps")
+                        }
+                    }
                 }
             }
         }
@@ -390,4 +501,36 @@ fun createGlowingDotBitmap(color: Color): BitmapDescriptor {
     canvas.drawCircle(center, center, coreSize / 2f, corePaint)
 
     return BitmapDescriptorFactory.fromBitmap(bitmap)
+}
+
+fun saveBitmapToGallery(context: Context, bitmap: Bitmap, title: String): Boolean {
+    val filename = "${title}.jpg"
+    var fos: OutputStream? = null
+    var success = false
+    try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val contentValues = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
+                put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/SafeTravel")
+            }
+            val imageUri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+            if (imageUri != null) {
+                fos = context.contentResolver.openOutputStream(imageUri)
+                if (fos != null) {
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 100, fos)
+                    success = true
+                }
+            }
+        } else {
+             // For older versions, we could use standard file output to external storage
+             // But for brevity and target SDK, focusing on modern approach.
+             // If strictly needed, we would use Environment.getExternalStoragePublicDirectory...
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+    } finally {
+        fos?.close()
+    }
+    return success
 }

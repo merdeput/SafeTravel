@@ -50,7 +50,9 @@ data class InTripUiState(
     val isProcessingTap: Boolean = false,
     val cameraPosition: CameraPosition = CameraPosition.fromLatLngZoom(LatLng(10.762622, 106.660172), 15f),
     val activeFilters: Set<MarkerType> = MarkerType.values().toSet(),
-    val reports: List<MapMarker> = emptyList() // List of reports for the bottom sheet
+    val reports: List<MapMarker> = emptyList(), // List of reports for the bottom sheet
+    val selectedMarker: MapMarker? = null, // Track selected marker for route
+    val routePoints: List<LatLng> = emptyList() // Store route points
 )
 
 @HiltViewModel
@@ -88,6 +90,14 @@ class InTripViewModel @Inject constructor(
         }
     }
     
+    fun onMarkerClick(marker: MapMarker) {
+        _uiState.update { it.copy(selectedMarker = marker) }
+    }
+    
+    fun clearSelection() {
+        _uiState.update { it.copy(selectedMarker = null, routePoints = emptyList()) }
+    }
+
     fun toggleFilter(type: MarkerType) {
         _uiState.update { state ->
             val newFilters = if (state.activeFilters.contains(type)) {
@@ -185,6 +195,12 @@ class InTripViewModel @Inject constructor(
 
     fun onMapClick(latLng: LatLng) {
         if (_uiState.value.isProcessingTap) return
+        
+        // If we tapped outside a marker (handled by map click), clear selection
+        if (_uiState.value.selectedMarker != null) {
+            clearSelection()
+            return
+        }
 
         _uiState.update { it.copy(isProcessingTap = true) }
         addLogMessage("... Getting location info")
