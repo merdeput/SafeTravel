@@ -277,11 +277,8 @@ class BackgroundSafetyService : Service(), SensorEventListener {
             }
         )
 
-        val pendingIntent: PendingIntent = Intent(this, EmergencyActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }.let { notificationIntent ->
-            PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE)
-        }
+        val fullScreenIntent = buildEmergencyPendingIntent()
+        val canUseFullScreen = canUseFullScreenIntent(notificationManager)
 
         val notification = NotificationCompat.Builder(this, channelId)
             .setContentTitle("ACCIDENT DETECTED")
@@ -289,7 +286,14 @@ class BackgroundSafetyService : Service(), SensorEventListener {
             .setSmallIcon(R.mipmap.ic_launcher)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setFullScreenIntent(pendingIntent, true) // This wakes up the screen and launches activity
+            .apply {
+                if (canUseFullScreen) {
+                    setFullScreenIntent(fullScreenIntent, true) // This wakes up the screen and launches activity
+                } else {
+                    startEmergencyActivity() // Fallback so lock-screen card still appears
+                }
+                setContentIntent(fullScreenIntent)
+            }
             .setAutoCancel(true)
             .build()
 
@@ -347,11 +351,8 @@ class BackgroundSafetyService : Service(), SensorEventListener {
             }
         )
 
-        val pendingIntent: PendingIntent = Intent(this, EmergencyActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }.let { notificationIntent ->
-            PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE)
-        }
+        val fullScreenIntent = buildEmergencyPendingIntent()
+        val canUseFullScreen = canUseFullScreenIntent(notificationManager)
 
         val notification = NotificationCompat.Builder(this, channelId)
             .setContentTitle("FALL DETECTED")
@@ -360,7 +361,14 @@ class BackgroundSafetyService : Service(), SensorEventListener {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
-            .setFullScreenIntent(pendingIntent, true) // Wake up screen and launch activity
+            .apply {
+                if (canUseFullScreen) {
+                    setFullScreenIntent(fullScreenIntent, true) // Wake up screen and launch activity
+                } else {
+                    startEmergencyActivity()
+                }
+                setContentIntent(fullScreenIntent)
+            }
             .setAutoCancel(true)
             .build()
 
@@ -426,6 +434,33 @@ class BackgroundSafetyService : Service(), SensorEventListener {
 
         // Use a unique ID based on message or constant if just one general alert
         notificationManager.notify(5, notification)
+    }
+
+    private fun canUseFullScreenIntent(notificationManager: NotificationManager): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            notificationManager.canUseFullScreenIntent()
+        } else {
+            true
+        }
+    }
+
+    private fun buildEmergencyPendingIntent(): PendingIntent {
+        val intent = Intent(this, EmergencyActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        return PendingIntent.getActivity(
+            this,
+            0,
+            intent,
+            PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
+    private fun startEmergencyActivity() {
+        val intent = Intent(this, EmergencyActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        startActivity(intent)
     }
 
     private fun startLocationTracking() {

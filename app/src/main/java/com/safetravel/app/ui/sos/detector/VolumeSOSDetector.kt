@@ -20,12 +20,14 @@ class VolumeSOSDetector(
         private const val CLICK_COUNT_THRESHOLD = 10
         private const val TIME_WINDOW_MS = 10000L
         private const val VOLUME_BROADCAST_ACTION = "android.media.VOLUME_CHANGED_ACTION"
+        private const val EXTRA_STREAM_TYPE = "android.media.EXTRA_VOLUME_STREAM_TYPE"
+        private const val EXTRA_STREAM_VALUE = "android.media.EXTRA_VOLUME_STREAM_VALUE"
     }
 
     private var clickCount = 0
     private var lastClickTime = 0L
     private var isListening = false
-    private var lastVolume = -1 // Track volume changes
+    private val lastVolumesByStream = mutableMapOf<Int, Int>() // Track per-stream changes
 
     private val resetHandler = Handler(Looper.getMainLooper())
     private val resetRunnable = Runnable {
@@ -36,7 +38,7 @@ class VolumeSOSDetector(
         override fun onReceive(context: Context?, intent: Intent?) {
             try {
                 if (intent?.action == VOLUME_BROADCAST_ACTION) {
-                    processVolumeChange()
+                    processVolumeChange(intent)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error processing volume change", e)
@@ -67,9 +69,16 @@ class VolumeSOSDetector(
                 context.registerReceiver(volumeBroadcastReceiver, filter)
             }
 
-            // Initialize last volume
+            // Initialize last volume snapshots for the streams we care about
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-            lastVolume = audioManager?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: -1
+            listOf(
+                AudioManager.STREAM_MUSIC,
+                AudioManager.STREAM_RING,
+                AudioManager.STREAM_ALARM,
+                AudioManager.STREAM_VOICE_CALL
+            ).forEach { stream ->
+                lastVolumesByStream[stream] = audioManager?.getStreamVolume(stream) ?: -1
+            }
 
             isListening = true
             Log.d(TAG, "Started listening for volume changes")
@@ -101,15 +110,23 @@ class VolumeSOSDetector(
         }
     }
 
-    private fun processVolumeChange() {
-        // Verify volume actually changed to avoid false triggers
-        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-        val currentVolume = audioManager?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: return
+    private fun processVolumeChange(intent: Intent) {
+        val streamType = intent.getIntExtra(EXTRA_STREAM_TYPE, -1)
+        val newVolume = intent.getIntExtra(EXTRA_STREAM_VALUE, -1)
 
-        if (currentVolume == lastVolume) {
-            return // No actual change
-        }
-        lastVolume = currentVolume
+        // Only act on real volume changes for common hardware buttons (music/ring/alarm/voice).
+        val relevantStreams = setOf(
+            AudioManager.STREAM_MUSIC,
+            AudioManager.STREAM_RING,
+            AudioManager.STREAM_ALARM,
+            AudioManager.STREAM_VOICE_CALL
+        )
+
+        if (streamType !in relevantStreams || newVolume < 0) return
+
+        val lastVolume = lastVolumesByStream[streamType]
+        if (lastVolume != null && lastVolume == newVolume) return // no change
+        lastVolumesByStream[streamType] = newVolume
 
         val now = System.currentTimeMillis()
 
