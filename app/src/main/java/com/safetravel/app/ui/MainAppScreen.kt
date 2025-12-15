@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Assistant
 import androidx.compose.material.icons.filled.CompassCalibration
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocationOn
@@ -136,6 +137,23 @@ fun MainAppScreen(
                     ) 
                 },
                 actions = {
+                    // AI Help Button
+                    FilledTonalIconButton(
+                        onClick = { rootNavController.navigate("ai_help") },
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f),
+                            contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                    ) {
+                        Icon(
+                            Icons.Default.Assistant, // AI Sparkle icon
+                            contentDescription = "AI Help",
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.width(8.dp))
+                    
                     // Enhanced Notification Button
                     FilledTonalIconButton(
                         onClick = { rootNavController.navigate("sos_alerts") },

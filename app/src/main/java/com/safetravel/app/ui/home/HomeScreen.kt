@@ -6,8 +6,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Dangerous
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -19,9 +24,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.safetravel.app.data.model.NewsWeatherResponse
+import com.safetravel.app.data.model.ProvinceData
 import com.safetravel.app.data.model.TripDTO
 
 @Composable
@@ -70,6 +78,7 @@ fun HomeScreen(
                     item {
                         ActiveTripDashboard(
                             trip = uiState.currentTrip!!,
+                            newsWeather = uiState.newsWeather,
                             onManageTrip = { onTripClick(uiState.currentTrip!!.id) }
                         )
                     }
@@ -139,7 +148,29 @@ fun NoTripState(onCreateTripClick: () -> Unit) {
 }
 
 @Composable
-fun ActiveTripDashboard(trip: TripDTO, onManageTrip: () -> Unit) {
+fun ActiveTripDashboard(
+    trip: TripDTO, 
+    newsWeather: NewsWeatherResponse?,
+    onManageTrip: () -> Unit
+) {
+    val provinceData = newsWeather?.provinces?.firstOrNull()
+    val weather = provinceData?.weatherForecast?.firstOrNull()
+    
+    // Safety Score Logic
+    val score = provinceData?.score ?: 95 // Default or from mock
+    val (scoreColor, scoreText, scoreIcon) = when {
+        score > 75 -> Triple(Color(0xFF4CAF50), "Safe", Icons.Outlined.CheckCircle) // Green
+        score >= 50 -> Triple(Color(0xFFFFC107), "Caution", Icons.Outlined.WarningAmber) // Amber
+        else -> Triple(Color(0xFFF44336), "Dangerous", Icons.Outlined.Dangerous) // Red
+    }
+    
+    // Parse temperature
+    val tempDisplay = weather?.temperature?.split("-")?.get(0)?.replace("°C", "")?.trim()?.plus("°") 
+        ?: weather?.temperature 
+        ?: "24°"
+    
+    val conditionDisplay = weather?.condition?.split(".")?.get(0) ?: "Sunny"
+
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         // Main Trip Card with Gradient
         Box(
@@ -215,16 +246,16 @@ fun ActiveTripDashboard(trip: TripDTO, onManageTrip: () -> Unit) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             StatCard(
                 title = "Safety Score",
-                value = "95",
-                subtitle = "Excellent",
+                value = score.toString(),
+                subtitle = scoreText,
                 modifier = Modifier.weight(1f),
-                icon = Icons.Default.Shield,
-                color = MaterialTheme.colorScheme.primary
+                icon = scoreIcon,
+                color = scoreColor
             )
             StatCard(
                 title = "Weather",
-                value = "24°",
-                subtitle = "Sunny",
+                value = tempDisplay,
+                subtitle = conditionDisplay,
                 modifier = Modifier.weight(1f),
                 icon = Icons.Default.WbSunny,
                 color = Color(0xFFFFB300) // Sunny Orange
@@ -244,7 +275,132 @@ fun ActiveTripDashboard(trip: TripDTO, onManageTrip: () -> Unit) {
         ) {
             Text("Manage Trip", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         }
+        
+        // News & Summary Card
+        if (provinceData != null) {
+            NewsAndWeatherCard(provinceData, scoreColor)
+        }
     }
+}
+
+@Composable
+fun NewsAndWeatherCard(provinceData: ProvinceData, accentColor: Color) {
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            // Header
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = accentColor
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Smart Insights",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Executive Summary
+            if (!provinceData.executiveSummary.isNullOrBlank()) {
+                ContainerBox(
+                    color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.4f)
+                ) {
+                   Column {
+                       Text(
+                           text = "EXECUTIVE SUMMARY",
+                           style = MaterialTheme.typography.labelSmall,
+                           fontWeight = FontWeight.Bold,
+                           color = MaterialTheme.colorScheme.tertiary
+                       )
+                       Spacer(modifier = Modifier.height(8.dp))
+                       Text(
+                           text = provinceData.executiveSummary,
+                           style = MaterialTheme.typography.bodyMedium,
+                           color = MaterialTheme.colorScheme.onSurface
+                       )
+                   }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+            
+            // Recent News
+            if (!provinceData.recentNews.isNullOrEmpty()) {
+                Text(
+                    text = "Recent Updates",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                provinceData.recentNews.take(3).forEach { news ->
+                    NewsItemRow(news, accentColor)
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun NewsItemRow(news: com.safetravel.app.data.model.NewsItem, accentColor: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically // FIX
+    ) {
+        Box(
+            modifier = Modifier
+                .padding(top = 6.dp)
+                .size(6.dp)
+                .clip(RoundedCornerShape(50))
+                .background(accentColor)
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Column {
+            Text(
+                text = news.title ?: "Unknown Title",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = news.snippet ?: "",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = news.date ?: "",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.outline
+            )
+        }
+    }
+}
+
+@Composable
+fun ContainerBox(
+    color: Color,
+    content: @Composable BoxScope.() -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(color)
+            .padding(16.dp),
+        content = content
+    )
 }
 
 @Composable
@@ -282,7 +438,9 @@ fun StatCard(
                 text = value,
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = title,
@@ -292,7 +450,9 @@ fun StatCard(
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }

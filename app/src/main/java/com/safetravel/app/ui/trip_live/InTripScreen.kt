@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FilterList
@@ -30,14 +31,15 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
+import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
-import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MapStyleOptions
 import com.google.maps.android.compose.*
 import com.safetravel.app.ui.common.PlacesSearchBar
 import com.safetravel.app.ui.common.SosButtonViewModel
 import com.safetravel.app.ui.common.SosState
 
+// Map Style JSON (Dark Mode)
 private const val MAP_STYLE_JSON = """[{"elementType":"geometry","stylers":[{"color":"#242f3e"}]},{"elementType":"labels.text.stroke","stylers":[{"color":"#242f3e"}]},{"elementType":"labels.text.fill","stylers":[{"color":"#746855"}]},{"featureType":"administrative.locality","elementType":"labels.text.fill","stylers":[{"color":"#d59563"}]},{"featureType":"poi","elementType":"labels.text.fill","stylers":[{"color":"#d59563"}]},{"featureType":"poi.park","elementType":"geometry","stylers":[{"color":"#263c3f"}]},{"featureType":"poi.park","elementType":"labels.text.fill","stylers":[{"color":"#6b9a76"}]},{"featureType":"road","elementType":"geometry","stylers":[{"color":"#38414e"}]},{"featureType":"road","elementType":"geometry.stroke","stylers":[{"color":"#212a37"}]},{"featureType":"road","elementType":"labels.text.fill","stylers":[{"color":"#9ca5b3"}]},{"featureType":"road.highway","elementType":"geometry","stylers":[{"color":"#746855"}]},{"featureType":"road.highway","elementType":"geometry.stroke","stylers":[{"color":"#1f2835"}]},{"featureType":"road.highway","elementType":"labels.text.fill","stylers":[{"color":"#f3d19c"}]},{"featureType":"transit","elementType":"geometry","stylers":[{"color":"#2f3948"}]},{"featureType":"transit.station","elementType":"labels.text.fill","stylers":[{"color":"#d59563"}]},{"featureType":"water","elementType":"geometry","stylers":[{"color":"#17263c"}]},{"featureType":"water","elementType":"labels.text.fill","stylers":[{"color":"#515c6d"}]},{"featureType":"water","elementType":"labels.text.stroke","stylers":[{"color":"#17263c"}]}]"""
 
 @OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
@@ -45,7 +47,7 @@ private const val MAP_STYLE_JSON = """[{"elementType":"geometry","stylers":[{"co
 fun InTripScreen(
     navController: NavController,
     viewModel: InTripViewModel = hiltViewModel(),
-    sosViewModel: SosButtonViewModel // Hoisted from MainAppScreen
+    sosViewModel: SosButtonViewModel
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val sosUiState by sosViewModel.uiState.collectAsState()
@@ -70,11 +72,10 @@ fun InTripScreen(
         }
     }
 
-    // This LaunchedEffect now correctly observes the hoisted ViewModel
     LaunchedEffect(sosUiState.sosState) {
         if (sosUiState.sosState is SosState.NavigateToAiHelp) {
             navController.navigate("ai_help")
-            sosViewModel.onNavigatedToAiHelp() // Reset the state
+            sosViewModel.onNavigatedToAiHelp()
         }
     }
 
@@ -138,7 +139,7 @@ fun InTripScreen(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
-                
+
                 if (uiState.reports.isEmpty()) {
                     Box(
                         modifier = Modifier
@@ -156,7 +157,7 @@ fun InTripScreen(
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 250.dp), // Limit height to allow scrolling
+                            .heightIn(max = 250.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                         contentPadding = PaddingValues(vertical = 8.dp)
                     ) {
@@ -167,8 +168,7 @@ fun InTripScreen(
                                 onDelete = { viewModel.deleteReport(report.id) }
                             )
                         }
-                        // Spacer to lift the last item above the global FAB
-                        item { 
+                        item {
                             Spacer(modifier = Modifier.height(110.dp))
                         }
                     }
@@ -182,14 +182,14 @@ fun InTripScreen(
                 .fillMaxSize()
         ) {
             val mapStyle = remember { MapStyleOptions(MAP_STYLE_JSON) }
-            
+
             // Google Map
             GoogleMap(
                 modifier = Modifier.fillMaxSize(),
                 cameraPositionState = cameraPositionState,
                 properties = MapProperties(
                     isMyLocationEnabled = false,
-                    mapStyleOptions = mapStyle // Apply the dark style
+                    mapStyleOptions = mapStyle
                 ),
                 uiSettings = MapUiSettings(zoomControlsEnabled = false, myLocationButtonEnabled = false),
                 onMapClick = viewModel::onMapClick
@@ -198,7 +198,7 @@ fun InTripScreen(
                 uiState.currentLocation?.let { location ->
                     val userColor = Color(0xFF9E9E9E) // Grey
                     val glowingDot = remember(userColor) { createGlowingDotBitmap(userColor) }
-                    
+
                     Marker(
                         state = MarkerState(position = location),
                         title = "You are here",
@@ -219,7 +219,7 @@ fun InTripScreen(
                     } else {
                         val color = markerData.getColor()
                         val circleBitmap = remember(color) { createGlowingDotBitmap(color) }
-    
+
                         Marker(
                             state = MarkerState(position = markerData.position),
                             title = markerData.title,
@@ -229,7 +229,7 @@ fun InTripScreen(
                     }
                 }
             }
-            
+
             // Top UI: Search & Simplified Filters
             Row(
                 modifier = Modifier
@@ -241,7 +241,7 @@ fun InTripScreen(
                     onPlaceSelected = viewModel::onPlaceSelected,
                     modifier = Modifier.weight(1f)
                 )
-                
+
                 var showFilterMenu by remember { mutableStateOf(false) }
 
                 Box(modifier = Modifier.padding(end = 16.dp)) {
@@ -265,9 +265,8 @@ fun InTripScreen(
                                         }
                                     )
                                 },
-                                onClick = { 
-                                    viewModel.toggleFilter(type) 
-                                    // Don't close menu on click to allow multiple selections
+                                onClick = {
+                                    viewModel.toggleFilter(type)
                                 },
                                 leadingIcon = {
                                     val isSelected = uiState.activeFilters.contains(type)
@@ -278,7 +277,6 @@ fun InTripScreen(
                                             tint = MaterialTheme.colorScheme.primary
                                         )
                                     } else {
-                                        // Add a spacer to keep alignment consistent
                                         Spacer(modifier = Modifier.size(24.dp))
                                     }
                                 }
@@ -292,21 +290,29 @@ fun InTripScreen(
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
             }
 
-            // Recenter Camera Button
-            Box(
+            // Floating Buttons Stack
+            Column(
                 modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(start = 16.dp, bottom = 140.dp) 
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 16.dp, bottom = 128.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 FloatingActionButton(
+                    onClick = { navController.navigate("bluetooth_hearing") },
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                ) {
+                    Icon(Icons.Default.Bluetooth, contentDescription = "SOS Hearing")
+                }
+
+                FloatingActionButton(
+                    // FIXED: Restored 'recenterCamera()' instead of 'onRecenterClick()'
                     onClick = { viewModel.recenterCamera() },
                     containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = MaterialTheme.colorScheme.primary
+                    contentColor = MaterialTheme.colorScheme.onSurface
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.MyLocation,
-                        contentDescription = "Recenter Map"
-                    )
+                    Icon(Icons.Default.MyLocation, contentDescription = "Recenter")
                 }
             }
         }
@@ -341,7 +347,7 @@ fun ReportItem(
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f)
             )
-            
+
             IconButton(onClick = onResolve) {
                 Icon(Icons.Default.Check, contentDescription = "Resolve", tint = MaterialTheme.colorScheme.primary)
             }
@@ -352,16 +358,15 @@ fun ReportItem(
     }
 }
 
-fun createGlowingDotBitmap(color: Color): com.google.android.gms.maps.model.BitmapDescriptor {
-    val coreSize = 30f // Diameter of the solid core
-    val glowSize = 20f // Extra radius for the glow
+fun createGlowingDotBitmap(color: Color): BitmapDescriptor {
+    val coreSize = 30f
+    val glowSize = 20f
     val totalSize = (coreSize + glowSize * 2).toInt()
 
     val bitmap = Bitmap.createBitmap(totalSize, totalSize, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
     val center = totalSize / 2f
 
-    // 1. Draw Glow (blurred circle)
     val glowPaint = Paint().apply {
         this.color = color.copy(alpha = 0.6f).toArgb()
         isAntiAlias = true
@@ -370,7 +375,6 @@ fun createGlowingDotBitmap(color: Color): com.google.android.gms.maps.model.Bitm
     }
     canvas.drawCircle(center, center, (coreSize / 2f) + 5f, glowPaint)
 
-    // 2. Draw White Border
     val borderPaint = Paint().apply {
         this.color = android.graphics.Color.WHITE
         isAntiAlias = true
@@ -378,7 +382,6 @@ fun createGlowingDotBitmap(color: Color): com.google.android.gms.maps.model.Bitm
     }
     canvas.drawCircle(center, center, (coreSize / 2f) + 4f, borderPaint)
 
-    // 3. Draw Solid Core
     val corePaint = Paint().apply {
         this.color = color.toArgb()
         isAntiAlias = true

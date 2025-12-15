@@ -1,14 +1,19 @@
 package com.safetravel.app
 
+import android.app.Activity
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.core.util.Consumer
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -23,8 +28,10 @@ import com.safetravel.app.ui.createtrip.CreateTripViewModel
 import com.safetravel.app.ui.createtrip.LocationPickerScreen
 import com.safetravel.app.ui.login.LoginScreen
 import com.safetravel.app.ui.login.RegisterScreen
+import com.safetravel.app.ui.profile.EmergencyInfoScreen
 import com.safetravel.app.ui.profile.SettingsScreen
 import com.safetravel.app.ui.sos.AiHelpScreen
+import com.safetravel.app.ui.sos.BluetoothHearingScreen
 import com.safetravel.app.ui.sos.SosAlertsScreen
 import com.safetravel.app.ui.theme.BeeTheme
 import com.safetravel.app.ui.triphistory.TripHistoryScreen
@@ -49,11 +56,54 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+    
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+    }
 }
 
 @Composable
 fun AppNavigation(startDestination: String) {
     val navController = rememberNavController()
+    val context = LocalContext.current
+
+    // Handle deep links from Notifications (e.g. Bluetooth Hearing)
+    LaunchedEffect(Unit) {
+        val activity = context as? Activity
+        val intent = activity?.intent
+        
+        // Check for navigation route extra
+        val route = intent?.getStringExtra("navigation_route")
+        if (route == "bluetooth_hearing") {
+            navController.navigate("bluetooth_hearing") {
+                // Ensure we don't build up a huge stack
+                popUpTo("main_app") { saveState = true }
+                launchSingleTop = true
+            }
+            // Clear the extra so rotation/recreation doesn't re-trigger navigation
+            intent.removeExtra("navigation_route")
+        }
+    }
+    
+    // Also listen for new intents if the activity is already running
+    DisposableEffect(Unit) {
+        val listener = Consumer<Intent> { intent ->
+            val route = intent.getStringExtra("navigation_route")
+            if (route == "bluetooth_hearing") {
+                navController.navigate("bluetooth_hearing") {
+                    popUpTo("main_app") { saveState = true }
+                    launchSingleTop = true
+                }
+                intent.removeExtra("navigation_route")
+            }
+        }
+        val activity = context as? ComponentActivity
+        activity?.addOnNewIntentListener(listener)
+        onDispose {
+            activity?.removeOnNewIntentListener(listener)
+        }
+    }
 
     NavHost(navController = navController, startDestination = startDestination) {
 
@@ -151,9 +201,16 @@ fun AppNavigation(startDestination: String) {
         composable("settings") {
             SettingsScreen(
                 onNavigateUp = { navController.popBackStack() },
+                onNavigateToEmergencyInfo = { navController.navigate("emergency_info") },
                 onLogout = {
                     navController.navigate("login") { popUpTo(0) { inclusive = true } }
                 }
+            )
+        }
+        
+        composable("emergency_info") {
+            EmergencyInfoScreen(
+                onNavigateUp = { navController.popBackStack() }
             )
         }
 
@@ -173,6 +230,12 @@ fun AppNavigation(startDestination: String) {
                 onEmergencyStopped = { 
                     navController.popBackStack("main_app", inclusive = false) 
                 }
+            )
+        }
+        
+        composable("bluetooth_hearing") {
+            BluetoothHearingScreen(
+                onNavigateUp = { navController.popBackStack() }
             )
         }
     }

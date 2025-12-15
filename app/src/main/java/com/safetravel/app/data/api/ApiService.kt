@@ -10,6 +10,7 @@ import com.safetravel.app.data.model.FriendRequestRequest
 import com.safetravel.app.data.model.Friendship
 import com.safetravel.app.data.model.LocationData
 import com.safetravel.app.data.model.LoginResponse
+import com.safetravel.app.data.model.NewsWeatherResponse
 import com.safetravel.app.data.model.NotificationResponse
 import com.safetravel.app.data.model.RegisterRequest
 import com.safetravel.app.data.model.SendSosRequest
@@ -247,4 +248,10 @@ interface ApiService {
         @Path("trip_id") tripId: Int,
         @Body tripData: TripBase
     ): Response<TripDTO>
+
+    @GET("api/api/{location}")
+    suspend fun getNewsAndWeather(
+        @Header("Authorization") token: String,
+        @Path("location") location: String
+    ): Response<NewsWeatherResponse>
 }
