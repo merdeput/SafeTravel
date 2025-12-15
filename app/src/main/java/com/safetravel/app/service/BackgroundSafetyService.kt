@@ -83,6 +83,7 @@ class BackgroundSafetyService : Service(), SensorEventListener {
     private var latestSpeedMps = 0f
     private var lastLocation: Location? = null
     private var lastLocationTimestampMs: Long = 0L
+    private var lastLocationElapsedNanos: Long = 0L
     private var latestActivityHint: ActivityHint = ActivityHint.UNKNOWN
 
     // Channel to process sensor events sequentially and avoid concurrency issues
@@ -466,21 +467,39 @@ class BackgroundSafetyService : Service(), SensorEventListener {
 
     private fun updateSpeedFromLocation(location: Location) {
         val nowMs = System.currentTimeMillis()
-        val computedSpeed = if (location.hasSpeed()) {
-            location.speed
+        val nowElapsedNanos = location.elapsedRealtimeNanos
+        val isAccurateFix = location.hasAccuracy() && location.accuracy <= 30f
+
+        val speedFromProvider = if (location.hasSpeed()) {
+            val hasTightSpeedAccuracy = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                location.hasSpeedAccuracy() && location.speedAccuracyMetersPerSecond <= 1.5f
+            } else {
+                true
+            }
+            if (isAccurateFix && hasTightSpeedAccuracy) location.speed else Float.NaN
+        } else {
+            Float.NaN
+        }
+
+        val computedSpeed = if (!speedFromProvider.isNaN()) {
+            speedFromProvider
         } else {
             val lastLoc = lastLocation
-            if (lastLoc != null) {
+            val lastElapsed = lastLocationElapsedNanos
+            if (lastLoc != null && lastElapsed > 0L) {
                 val distance = lastLoc.distanceTo(location) // meters
-                val timeDeltaSec = ((nowMs - lastLocationTimestampMs).coerceAtLeast(1L)) / 1000f
-                distance / timeDeltaSec
+                val elapsedNanos = (nowElapsedNanos - lastElapsed).coerceAtLeast(1_000_000L)
+                val timeDeltaSec = elapsedNanos / 1_000_000_000f
+                if (timeDeltaSec > 0f) distance / timeDeltaSec else 0f
             } else {
                 0f
             }
         }
+
         latestSpeedMps = computedSpeed.coerceAtLeast(0f)
         lastLocation = location
         lastLocationTimestampMs = nowMs
+        lastLocationElapsedNanos = nowElapsedNanos
         latestActivityHint = inferActivityHint(latestSpeedMps)
     }
 
