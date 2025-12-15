@@ -20,7 +20,11 @@ class LocationService(private val context: Context) {
         val locationRequest = LocationRequest.Builder(
             Priority.PRIORITY_HIGH_ACCURACY,
             intervalMillis
-        ).build()
+        )
+            .setMinUpdateIntervalMillis((intervalMillis / 2).coerceAtLeast(500L))
+            .setWaitForAccurateLocation(true)
+            .setGranularity(Granularity.GRANULARITY_FINE)
+            .build()
 
         val locationCallback = object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
