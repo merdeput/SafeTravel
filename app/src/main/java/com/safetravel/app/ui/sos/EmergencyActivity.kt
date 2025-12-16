@@ -2,6 +2,7 @@ package com.safetravel.app.ui.sos
 
 import android.app.KeyguardManager
 import android.content.Context
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
@@ -27,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.safetravel.app.data.repository.SettingsRepository
+import com.safetravel.app.MainActivity
 import com.safetravel.app.ui.theme.BeeTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.first
@@ -80,6 +82,7 @@ fun EmergencyCardScreen(
     viewModel: AiHelpViewModel,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
     // Collecting settings from DataStore
     val settings by settingsRepository.settingsFlow.collectAsState(initial = null)
     val info = settings?.emergencyInfo
@@ -159,12 +162,32 @@ fun EmergencyCardScreen(
 
                 Spacer(modifier = Modifier.height(48.dp))
 
-                Button(
-                    onClick = { showPasscodeDialog = true },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                    modifier = Modifier.fillMaxWidth().height(56.dp)
-                ) {
-                    Text("DISMISS", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(
+                        onClick = {
+                            val intent = Intent(context, MainActivity::class.java).apply {
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                                putExtra("navigation_route", "ai_help")
+                            }
+                            context.startActivity(intent)
+                            onDismiss()
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        ),
+                        modifier = Modifier.fillMaxWidth().height(56.dp)
+                    ) {
+                        Text("AI HELP", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = onDismiss,
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                        modifier = Modifier.fillMaxWidth().height(56.dp)
+                    ) {
+                        Text("DISMISS", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
 

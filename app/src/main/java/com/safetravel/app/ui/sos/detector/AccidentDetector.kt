@@ -13,9 +13,9 @@ class AccidentDetector {
     // --- Configuration Constants ---
     companion object {
         // Thresholds
-        private const val THRESHOLD_IMPACT_TAM = 24.0f // ~2.4g (High force)
-        private const val THRESHOLD_IMPACT_JERK = 150.0f // Sudden jolt
-        private const val THRESHOLD_TUMBLE_TAM = 18.0f // ~1.8g (Moderate force)
+        private const val THRESHOLD_IMPACT_TAM = 28.0f // ~2.8g (High force, reduced false positives)
+        private const val THRESHOLD_IMPACT_JERK = 200.0f // Sudden jolt (raised to ignore small bumps)
+        private const val THRESHOLD_TUMBLE_TAM = 20.0f // ~2.0g (Moderate force)
         private const val THRESHOLD_TUMBLE_GYRO = 4.0f // ~230 deg/s (in radians) or raw gyro magnitude
         private const val THRESHOLD_STILLNESS_SMA = 1.0f // "At rest" threshold
         private const val THRESHOLD_MOVEMENT_CANCEL = 6.0f // Movement high enough to cancel alarm (increased)
@@ -33,6 +33,9 @@ class AccidentDetector {
         // Buffer settings
         private const val BUFFER_SIZE_NORMAL = 50 // 1 second at 50Hz
         private const val BUFFER_SIZE_POST_IMPACT = 25 // 0.5 second for post-impact analysis
+
+        // Context guard: below this speed we only accept extremely strong signals
+        private const val MIN_CONTEXT_SPEED = 2.0f
     }
 
     // --- Variables ---
@@ -152,15 +155,20 @@ class AccidentDetector {
                 }
                 
                 // TRIGGER LOGIC
+                // Require some movement context OR an extremely strong signal
+                val hasMotionContext = isActiveContext || speedMps > MIN_CONTEXT_SPEED
+
                 // 1. Hard Impact: High G + High Jerk
-                val isHardImpact = tam > tamThreshold && jerk > jerkThreshold
+                val isHardImpact = tam > tamThreshold && jerk > jerkThreshold && (hasMotionContext || tam > tamThreshold * 1.2f)
                 
                 // 2. Tumble: Moderate G + High Rotation (only if gyro is fresh)
-                val isTumble = tam > tumbleTamThreshold && 
+                val isTumble = hasMotionContext &&
+                              tam > tumbleTamThreshold && 
                               gyroMagnitude > gyroThreshold && 
                               isGyroFresh
                 // 3. Speed-drop reinforced: moderate TAM with meaningful recent speed drop
-                val isSpeedReinforcedImpact = hasSpeedDrop &&
+                val isSpeedReinforcedImpact = hasMotionContext &&
+                        hasSpeedDrop &&
                         tam > tamThreshold * 0.65f &&
                         speedDropPercent > (SPEED_DROP_THRESHOLD_PERCENT * 100)
                 

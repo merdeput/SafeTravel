@@ -20,8 +20,8 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object AppModule {
 
-    //private const val BASE_URL = "https://unthinning-perfidious-davina.ngrok-free.dev/" // Change this!
-    private const val BASE_URL = "http://10.0.2.2:8000/"
+    private const val BASE_URL = "https://hiulaptop.dev/" // Change this!
+    //private const val BASE_URL = "http://10.0.2.2:8000/"
     @Provides
     @Singleton
     fun provideLocationService(@ApplicationContext context: Context): LocationService {
