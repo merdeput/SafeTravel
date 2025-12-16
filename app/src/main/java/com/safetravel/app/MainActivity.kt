@@ -16,6 +16,7 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.util.Consumer
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavType
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -75,28 +76,14 @@ fun AppNavigation(startDestination: String) {
         
         // Check for navigation route extra
         val route = intent?.getStringExtra("navigation_route")
-        if (route == "bluetooth_hearing") {
-            navController.navigate("bluetooth_hearing") {
-                // Ensure we don't build up a huge stack
-                popUpTo("main_app") { saveState = true }
-                launchSingleTop = true
-            }
-            // Clear the extra so rotation/recreation doesn't re-trigger navigation
-            intent.removeExtra("navigation_route")
-        }
+        handleNavigationRoute(route, navController, intent)
     }
     
     // Also listen for new intents if the activity is already running
     DisposableEffect(Unit) {
         val listener = Consumer<Intent> { intent ->
             val route = intent.getStringExtra("navigation_route")
-            if (route == "bluetooth_hearing") {
-                navController.navigate("bluetooth_hearing") {
-                    popUpTo("main_app") { saveState = true }
-                    launchSingleTop = true
-                }
-                intent.removeExtra("navigation_route")
-            }
+            handleNavigationRoute(route, navController, intent)
         }
         val activity = context as? ComponentActivity
         activity?.addOnNewIntentListener(listener)
@@ -237,6 +224,22 @@ fun AppNavigation(startDestination: String) {
             BluetoothHearingScreen(
                 onNavigateUp = { navController.popBackStack() }
             )
+        }
+    }
+}
+
+private fun handleNavigationRoute(
+    route: String?,
+    navController: NavHostController,
+    intent: Intent?
+) {
+    when (route) {
+        "bluetooth_hearing", "ai_help" -> {
+            navController.navigate(route) {
+                popUpTo("main_app") { saveState = true }
+                launchSingleTop = true
+            }
+            intent?.removeExtra("navigation_route")
         }
     }
 }
