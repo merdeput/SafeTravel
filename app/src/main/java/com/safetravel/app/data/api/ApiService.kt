@@ -8,6 +8,9 @@ import com.safetravel.app.data.model.CreateNotificationRequest
 import com.safetravel.app.data.model.FriendRequest
 import com.safetravel.app.data.model.FriendRequestRequest
 import com.safetravel.app.data.model.Friendship
+import com.safetravel.app.data.model.GetIncidentsResponseDTO
+import com.safetravel.app.data.model.IncidentCreateDTO
+import com.safetravel.app.data.model.IncidentDTO
 import com.safetravel.app.data.model.LocationData
 import com.safetravel.app.data.model.LoginResponse
 import com.safetravel.app.data.model.NewsWeatherResponse
@@ -35,6 +38,7 @@ import retrofit2.http.Header
 import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Path
+import retrofit2.http.Query
 
 interface ApiService {
     @POST("location")
@@ -255,9 +259,31 @@ interface ApiService {
         @Body tripData: TripBase
     ): Response<TripDTO>
 
-    @GET("api/api/{location}")
+    @GET("api/{location}")
     suspend fun getNewsAndWeather(
         @Header("Authorization") token: String,
         @Path("location") location: String
     ): Response<NewsWeatherResponse>
+
+    // --- INCIDENT ENDPOINTS ---
+
+    @GET("api/incidents")
+    suspend fun getIncidents(
+        @Header("Authorization") token: String,
+        @Query("latitude") latitude: Double,
+        @Query("longitude") longitude: Double,
+        @Query("radius") radius: Double
+    ): Response<GetIncidentsResponseDTO>
+
+    @POST("api/incidents")
+    suspend fun createIncident(
+        @Header("Authorization") token: String,
+        @Body request: IncidentCreateDTO
+    ): Response<IncidentDTO>
+
+    @DELETE("api/incidents/{incident_id}")
+    suspend fun deleteIncident(
+        @Header("Authorization") token: String,
+        @Path("incident_id") incidentId: Long
+    ): Response<Unit>
 }

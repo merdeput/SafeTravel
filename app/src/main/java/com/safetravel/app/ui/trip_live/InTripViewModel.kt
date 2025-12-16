@@ -6,17 +6,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
-import com.safetravel.app.data.api.ApiService
-import com.safetravel.app.data.model.Coordinates
-import com.safetravel.app.data.model.LocationData
+import com.safetravel.app.data.repository.AuthRepository
 import com.safetravel.app.data.repository.GeocodingService
+import com.safetravel.app.data.repository.IncidentRepository
 import com.safetravel.app.data.repository.LocationService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import java.time.Instant
-import java.time.ZoneOffset
-import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
 enum class MarkerType {
@@ -27,9 +23,10 @@ enum class MarkerType {
 }
 
 data class MapMarker(
-    val id: Long = System.currentTimeMillis() + (Math.random() * 1000).toLong(), // Simple unique ID
+    val id: Long,
     val position: LatLng,
     val title: String,
+    val description: String?, // Added description
     val type: MarkerType = MarkerType.NORMAL
 ) {
     fun getColor(): Color {
@@ -59,7 +56,8 @@ data class InTripUiState(
 class InTripViewModel @Inject constructor(
     private val locationService: LocationService,
     private val geocodingService: GeocodingService,
-    private val apiService: ApiService
+    private val incidentRepository: IncidentRepository,
+    private val authRepository: AuthRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(InTripUiState())
@@ -69,10 +67,12 @@ class InTripViewModel @Inject constructor(
     private val _allMarkers = MutableStateFlow<List<MapMarker>>(emptyList())
     
     init {
-        // Add some dummy markers for demonstration
-        addDummyMarkers()
+        // Start location updates immediately to get initial position
+        viewModelScope.launch {
+            startLocationUpdates()
+        }
         
-        // Update filtered markers and reports list
+        // This combines all markers with the active filters to produce the displayed lists
         viewModelScope.launch {
             combine(_allMarkers, _uiState.map { it.activeFilters }.distinctUntilChanged()) { markers, filters ->
                 Pair(
@@ -120,156 +120,147 @@ class InTripViewModel @Inject constructor(
     fun submitReport(message: String) {
         val location = _uiState.value.currentLocation ?: return
         
-        // In a real app, send to API. Here, add to local list.
-        val newReport = MapMarker(
-            position = location,
-            title = message,
-            type = MarkerType.USER_REPORT
-        )
-        
-        _allMarkers.value = _allMarkers.value + newReport
-        
-        // Optionally send to server
-        sendLocationToServer(
-            locationData = LocationData(
-                type = "user_report",
-                coordinates = Coordinates(location.latitude, location.longitude),
-                timestamp = getCurrentTimestamp(),
-                placeName = message
-            ),
-            logPrefix = "✓ Report Submitted"
-        )
-    }
-    
-    fun deleteReport(reportId: Long) {
-        _allMarkers.update { currentMarkers ->
-            currentMarkers.filterNot { it.id == reportId }
+        viewModelScope.launch {
+            val result = incidentRepository.createIncident(
+                title = "User Report",
+                description = message,
+                category = "user_report",
+                latitude = location.latitude,
+                longitude = location.longitude,
+                severity = 0 // Default severity
+            )
+            
+            if (result.isSuccess) {
+                addLogMessage("✓ Report Submitted")
+                // Refresh incidents to show the new report
+                loadIncidents(location.latitude, location.longitude)
+            } else {
+                 addLogMessage("✗ Report Failed: ${result.exceptionOrNull()?.message}")
+            }
         }
     }
     
-    fun resolveReport(reportId: Long) {
-        // In a real app, update status on server. 
-        // Here we just remove it effectively "resolving" it from the active map.
-        // Or we could change its type/state if we had a more complex model.
-        deleteReport(reportId)
+    fun deleteReport(reportId: Long) {
+        viewModelScope.launch {
+            val result = incidentRepository.deleteIncident(reportId)
+            if (result.isSuccess) {
+                addLogMessage("✓ Report Deleted")
+                // Remove from local list immediately for better UX
+                _allMarkers.update { currentMarkers ->
+                    currentMarkers.filterNot { it.id == reportId }
+                }
+            } else {
+                addLogMessage("✗ Delete Failed: ${result.exceptionOrNull()?.message}")
+            }
+        }
     }
 
-    private fun addDummyMarkers() {
-        val baseLat = 10.762622
-        val baseLng = 106.660172
-        
-        val dummyMarkers = listOf(
-            MapMarker(position = LatLng(baseLat + 0.001, baseLng + 0.001), title = "Accident Reported", type = MarkerType.USER_REPORT),
-            MapMarker(position = LatLng(baseLat - 0.002, baseLng - 0.001), title = "Friend SOS: John", type = MarkerType.FRIEND_SOS),
-            MapMarker(position = LatLng(baseLat + 0.003, baseLng - 0.002), title = "SOS Alert nearby", type = MarkerType.OTHER_USER_SOS)
-        )
-        
-        _allMarkers.value = _allMarkers.value + dummyMarkers
+    private fun loadIncidents(lat: Double, lng: Double) {
+        viewModelScope.launch {
+            val result = incidentRepository.getIncidents(lat, lng, 10.0) // 10km radius
+            if (result.isSuccess) {
+                val response = result.getOrNull()
+                if (response != null) {
+                    val currentUserId = authRepository.currentUser?.id?.toLong()
+
+                    val markers = response.items.mapNotNull { itemWrapper ->
+                        val item = itemWrapper.item
+
+                        // Filter out resolved SOS
+                        if (item.status.equals("resolved", ignoreCase = true)) {
+                            return@mapNotNull null
+                        }
+
+                        val type = when (itemWrapper.priority) {
+                            0 -> MarkerType.FRIEND_SOS // Red
+                            1 -> MarkerType.OTHER_USER_SOS // Yellow
+                            2 -> MarkerType.USER_REPORT // Blue
+                            else -> MarkerType.NORMAL
+                        }
+
+                        // Filter out SOS from myself
+                        val isSos = type == MarkerType.FRIEND_SOS || type == MarkerType.OTHER_USER_SOS
+                        if (isSos && currentUserId != null && item.userId == currentUserId) {
+                            return@mapNotNull null
+                        }
+                        
+                        val title = when (type) {
+                            MarkerType.FRIEND_SOS -> "SOS: ${item.user?.username ?: "Friend"}"
+                            MarkerType.OTHER_USER_SOS -> "SOS Alert"
+                            else -> item.title ?: "Incident"
+                        }
+
+                        val description = when (type) {
+                             MarkerType.FRIEND_SOS -> item.message
+                             MarkerType.OTHER_USER_SOS -> item.message
+                             else -> item.description
+                        }
+
+                        MapMarker(
+                            id = item.id,
+                            position = LatLng(item.latitude, item.longitude),
+                            title = title,
+                            description = description,
+                            type = type
+                        )
+                    }
+                    _allMarkers.value = markers
+                } else {
+                    addLogMessage("No incidents found in the area")
+                }
+            } else {
+                addLogMessage("✗ Failed to load incidents: ${result.exceptionOrNull()?.message}")
+            }
+        }
     }
 
     fun startLocationUpdates() {
         Log.d("InTripViewModel", "Starting location updates")
         viewModelScope.launch {
-            locationService.getLocationUpdates(10000)
+            locationService.getLocationUpdates(10000) // Poll every 10 seconds
                 .catch { e -> addLogMessage("✗ Location Error: ${e.message}") }
                 .collect { location ->
                     val latLng = LatLng(location.latitude, location.longitude)
+                    val isFirstLocation = _uiState.value.currentLocation == null
+                    
                     _uiState.update {
                         it.copy(
                             currentLocation = latLng,
                             locationAccuracy = location.accuracy
                         )
                     }
-                    sendLocationToServer(
-                        locationData = LocationData(
-                            type = "current_location",
-                            coordinates = Coordinates(location.latitude, location.longitude),
-                            accuracy = location.accuracy,
-                            timestamp = getCurrentTimestamp()
-                        ),
-                        logPrefix = "✓ Current location"
-                    )
+                    
+                    // If this is the first location update, move the camera
+                    if (isFirstLocation) {
+                        recenterCamera()
+                    }
+                    
+                    // Fetch incidents around the new location
+                    loadIncidents(location.latitude, location.longitude)
                 }
         }
     }
 
     fun onMapClick(latLng: LatLng) {
-        if (_uiState.value.isProcessingTap) return
-        
-        // If we tapped outside a marker (handled by map click), clear selection
+        // If a marker info card is shown, tapping on map should dismiss it
         if (_uiState.value.selectedMarker != null) {
             clearSelection()
-            return
-        }
-
-        _uiState.update { it.copy(isProcessingTap = true) }
-        addLogMessage("... Getting location info")
-
-        viewModelScope.launch {
-            try {
-                val placeName = geocodingService.getAddressFromLatLng(latLng)
-                val newMarker = MapMarker(position = latLng, title = placeName, type = MarkerType.NORMAL)
-                _allMarkers.value = _allMarkers.value + newMarker
-                
-                sendLocationToServer(
-                    locationData = LocationData(
-                        type = "tap_location",
-                        coordinates = Coordinates(latLng.latitude, latLng.longitude),
-                        timestamp = getCurrentTimestamp(),
-                        placeName = placeName
-                    ),
-                    logPrefix = "✓ Tap: $placeName"
-                )
-            } catch (e: Exception) {
-                addLogMessage("✗ Tap error: ${e.message}")
-            } finally {
-                _uiState.update { it.copy(isProcessingTap = false) }
-            }
         }
     }
 
     fun onPlaceSelected(latLng: LatLng, placeName: String) {
-        val newMarker = MapMarker(position = latLng, title = placeName, type = MarkerType.NORMAL)
-        _allMarkers.value = _allMarkers.value + newMarker
-        
         _uiState.update { state ->
             state.copy(
                 cameraPosition = CameraPosition.fromLatLngZoom(latLng, 15f)
             )
         }
-        sendLocationToServer(
-            locationData = LocationData(
-                type = "search_location",
-                coordinates = Coordinates(latLng.latitude, latLng.longitude),
-                timestamp = getCurrentTimestamp(),
-                placeName = placeName
-            ),
-            logPrefix = "✓ Search: $placeName"
-        )
-    }
-
-    private fun sendLocationToServer(locationData: LocationData, logPrefix: String) {
-        viewModelScope.launch {
-            try {
-                val response = apiService.sendLocation(locationData)
-                if (response.isSuccessful) {
-                    addLogMessage("$logPrefix sent")
-                } else {
-                    addLogMessage("✗ $logPrefix Failed: ${response.code()}")
-                }
-            } catch (e: Exception) {
-                addLogMessage("✗ $logPrefix Error: ${e.message}")
-            }
-        }
+        // Load incidents for the newly selected place
+        loadIncidents(latLng.latitude, latLng.longitude)
     }
 
     private fun addLogMessage(message: String) {
         _uiState.update { state ->
             state.copy(logMessages = (state.logMessages + message).takeLast(5))
         }
-    }
-
-    private fun getCurrentTimestamp(): String {
-        return Instant.now().atOffset(ZoneOffset.UTC).format(DateTimeFormatter.ISO_INSTANT)
     }
 }

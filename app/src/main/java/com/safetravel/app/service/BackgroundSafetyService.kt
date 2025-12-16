@@ -203,6 +203,9 @@ class BackgroundSafetyService : Service(), SensorEventListener {
         val notificationManager = getSystemService(NotificationManager::class.java)
         notificationManager.cancel(2) // Cancel accident notification
         notificationManager.cancel(3) // Cancel fall notification
+        
+        // Notify other components (like SosButtonViewModel) that emergency is stopped
+        sensorDataRepository.emitResetEvent()
     }
 
     private fun startForegroundService() {

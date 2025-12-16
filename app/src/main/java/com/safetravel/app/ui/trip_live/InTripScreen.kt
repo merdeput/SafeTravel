@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
@@ -183,7 +184,6 @@ fun InTripScreen(
                         items(uiState.reports) { report ->
                             ReportItem(
                                 report = report,
-                                onResolve = { viewModel.resolveReport(report.id) },
                                 onDelete = { viewModel.deleteReport(report.id) }
                             )
                         }
@@ -234,10 +234,11 @@ fun InTripScreen(
 
                 // Other Markers
                 uiState.markers.forEach { markerData ->
+                    val markerTitle = markerData.description ?: markerData.title
                     if (markerData.type == MarkerType.NORMAL) {
                         Marker(
                             state = MarkerState(position = markerData.position),
-                            title = markerData.title,
+                            title = markerTitle,
                             icon = BitmapDescriptorFactory.defaultMarker(),
                             onClick = {
                                 viewModel.onMarkerClick(markerData)
@@ -250,7 +251,7 @@ fun InTripScreen(
 
                         Marker(
                             state = MarkerState(position = markerData.position),
-                            title = markerData.title,
+                            title = markerTitle,
                             icon = circleBitmap,
                             anchor = androidx.compose.ui.geometry.Offset(0.5f, 0.5f),
                             onClick = {
@@ -386,16 +387,22 @@ fun InTripScreen(
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(modifier = Modifier.weight(1f)) {
+                                // Prioritize description
                                 Text(
-                                    text = selected.title,
+                                    text = selected.description ?: selected.title,
                                     style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
                                 )
-                                Text(
-                                    text = "Type: ${selected.type.name.replace("_", " ")}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                // Show title as secondary if it exists and is different from description
+                                if (!selected.description.isNullOrEmpty() && selected.title != selected.description) {
+                                    Text(
+                                        text = selected.title,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                             IconButton(onClick = { viewModel.clearSelection() }) {
                                 Icon(Icons.Default.Close, contentDescription = "Close")
@@ -433,7 +440,6 @@ fun InTripScreen(
 @Composable
 fun ReportItem(
     report: MapMarker,
-    onResolve: () -> Unit,
     onDelete: () -> Unit
 ) {
     Card(
@@ -452,15 +458,23 @@ fun ReportItem(
                     .background(report.getColor())
             )
             Spacer(modifier = Modifier.width(12.dp))
-            Text(
-                text = report.title,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.weight(1f)
-            )
-
-            IconButton(onClick = onResolve) {
-                Icon(Icons.Default.Check, contentDescription = "Resolve", tint = MaterialTheme.colorScheme.primary)
+            Column(modifier = Modifier.weight(1f)) {
+                // Prioritize description
+                Text(
+                    text = report.description ?: report.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                // Show title as secondary info if available
+                if (!report.description.isNullOrEmpty() && report.title != report.description) {
+                    Text(
+                        text = report.title,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
             IconButton(onClick = onDelete) {
                 Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)

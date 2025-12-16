@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -28,6 +29,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.safetravel.app.data.repository.SettingsRepository
 import com.safetravel.app.ui.theme.BeeTheme
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -81,6 +84,28 @@ fun EmergencyCardScreen(
     val settings by settingsRepository.settingsFlow.collectAsState(initial = null)
     val info = settings?.emergencyInfo
     val uiState by viewModel.uiState.collectAsState()
+    
+    var showPasscodeDialog by remember { mutableStateOf(false) }
+
+    // Close screen when emergency is stopped
+    LaunchedEffect(uiState.emergencyStopped) {
+        if (uiState.emergencyStopped) {
+            onDismiss()
+        }
+    }
+
+    if (showPasscodeDialog) {
+        SosPasscodeDialog(
+            error = uiState.passcodeError,
+            onVerify = { inputPasscode ->
+                viewModel.onVerifyPasscode(inputPasscode)
+            },
+            onDismiss = { 
+                showPasscodeDialog = false
+                // Optional: clear error in VM if needed, though VM logic handles resets on success
+            }
+        )
+    }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -135,7 +160,7 @@ fun EmergencyCardScreen(
                 Spacer(modifier = Modifier.height(48.dp))
 
                 Button(
-                    onClick = onDismiss,
+                    onClick = { showPasscodeDialog = true },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                     modifier = Modifier.fillMaxWidth().height(56.dp)
                 ) {
@@ -185,4 +210,49 @@ fun EmergencyInfoItem(label: String, value: String) {
             )
         }
     }
+}
+
+@Composable
+private fun SosPasscodeDialog(error: String?, onVerify: (String) -> Unit, onDismiss: () -> Unit) {
+    var passcode by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Stop SOS") },
+        text = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "Enter passcode to stop emergency mode",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+                OutlinedTextField(
+                    value = passcode,
+                    onValueChange = { passcode = it },
+                    label = { Text("Passcode") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    isError = error != null,
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium
+                )
+                error?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onVerify(passcode) },
+                shape = MaterialTheme.shapes.medium
+            ) {
+                Text("Confirm")
+            }
+        },
+        dismissButton = {
+             TextButton(onClick = onDismiss) {
+                 Text("Cancel")
+             }
+        }
+    )
 }

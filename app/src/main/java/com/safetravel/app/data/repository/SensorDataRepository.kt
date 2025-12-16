@@ -31,6 +31,10 @@ class SensorDataRepository @Inject constructor() {
     private val _detectorEvents = MutableSharedFlow<DetectorTrigger>(extraBufferCapacity = 1)
     val detectorEvents = _detectorEvents.asSharedFlow()
 
+    // New Flow for Reset Events
+    private val _resetEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val resetEvents = _resetEvents.asSharedFlow()
+
     fun addSensorData(state: DetectionState) {
         // Update latest state
         _latestDetectionState.value = state
@@ -50,5 +54,9 @@ class SensorDataRepository @Inject constructor() {
 
     fun emitDetectorEvent(event: DetectorTrigger) {
         _detectorEvents.tryEmit(event)
+    }
+
+    fun emitResetEvent() {
+        _resetEvents.tryEmit(Unit)
     }
 }

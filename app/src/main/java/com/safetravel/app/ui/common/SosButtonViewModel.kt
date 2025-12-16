@@ -5,6 +5,7 @@ import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.safetravel.app.data.repository.AuthRepository
+import com.safetravel.app.data.repository.LocationService
 import com.safetravel.app.data.repository.SensorDataRepository
 import com.safetravel.app.data.repository.SettingsRepository
 import com.safetravel.app.data.repository.SosRepository
@@ -41,7 +42,8 @@ class SosButtonViewModel @Inject constructor(
     private val sosRepository: SosRepository,
     private val authRepository: AuthRepository,
     private val settingsRepository: SettingsRepository,
-    private val sensorDataRepository: SensorDataRepository
+    private val sensorDataRepository: SensorDataRepository,
+    private val locationService: LocationService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SosUiState())
@@ -65,6 +67,18 @@ class SosButtonViewModel @Inject constructor(
                     SensorDataRepository.DetectorTrigger.Accident -> startCountdownFromTrigger(SosTrigger.ACCIDENT)
                     SensorDataRepository.DetectorTrigger.Fall -> startCountdownFromTrigger(SosTrigger.FALL)
                     SensorDataRepository.DetectorTrigger.VolumeSos -> startCountdownFromTrigger(SosTrigger.VOLUME)
+                }
+            }
+        }
+        
+        // Listen for Reset events (e.g., stopped from EmergencyActivity or Service)
+        viewModelScope.launch {
+            sensorDataRepository.resetEvents.collect {
+                // If reset event occurs, clear any active SOS UI/Countdown
+                if (_uiState.value.sosState !is SosState.Idle) {
+                    countdownJob?.cancel()
+                    holdJob?.cancel()
+                    _uiState.update { it.copy(sosState = SosState.Idle, passcodeError = null) }
                 }
             }
         }
@@ -164,9 +178,14 @@ class SosButtonViewModel @Inject constructor(
         viewModelScope.launch {
              _uiState.update { it.copy(isSending = true, sendError = null) }
              
-             // Hardcoded location for now, should integrate LocationService
-             val lat = 34.052235
-             val lng = -118.243683
+             // Get current location from LocationService
+             val location = locationService.getCurrentLocation()
+             
+             // Use actual location or fallback if null (0.0, 0.0 is often used or maybe last known)
+             // Using 0.0 might be confusing, but better than crashing or fake data.
+             // Ideally the backend handles nulls or we wait for location.
+             val lat = location?.latitude ?: 0.0
+             val lng = location?.longitude ?: 0.0
              
              val currentUser = authRepository.currentUser
              val userId = currentUser?.id
