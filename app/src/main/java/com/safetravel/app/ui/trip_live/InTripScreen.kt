@@ -234,11 +234,12 @@ fun InTripScreen(
 
                 // Other Markers
                 uiState.markers.forEach { markerData ->
-                    val markerTitle = markerData.description ?: markerData.title
+                    // Use title for the title field (which shows up on click) and description for snippet
                     if (markerData.type == MarkerType.NORMAL) {
                         Marker(
                             state = MarkerState(position = markerData.position),
-                            title = markerTitle,
+                            title = markerData.title,
+                            snippet = markerData.description,
                             icon = BitmapDescriptorFactory.defaultMarker(),
                             onClick = {
                                 viewModel.onMarkerClick(markerData)
@@ -251,7 +252,8 @@ fun InTripScreen(
 
                         Marker(
                             state = MarkerState(position = markerData.position),
-                            title = markerTitle,
+                            title = markerData.title,
+                            snippet = markerData.description,
                             icon = circleBitmap,
                             anchor = androidx.compose.ui.geometry.Offset(0.5f, 0.5f),
                             onClick = {
@@ -387,20 +389,21 @@ fun InTripScreen(
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(modifier = Modifier.weight(1f)) {
-                                // Prioritize description
+                                // Display Title first (as it contains Verification info), then description
                                 Text(
-                                    text = selected.description ?: selected.title,
+                                    text = selected.title,
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
-                                    maxLines = 2,
+                                    maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
-                                // Show title as secondary if it exists and is different from description
-                                if (!selected.description.isNullOrEmpty() && selected.title != selected.description) {
+                                if (!selected.description.isNullOrEmpty()) {
                                     Text(
-                                        text = selected.title,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        text = selected.description,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
                             }

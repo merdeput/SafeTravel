@@ -27,7 +27,8 @@ data class MapMarker(
     val position: LatLng,
     val title: String,
     val description: String?, // Added description
-    val type: MarkerType = MarkerType.NORMAL
+    val type: MarkerType = MarkerType.NORMAL,
+    val severity: Int? = null // Added severity
 ) {
     fun getColor(): Color {
         return when (type) {
@@ -184,10 +185,17 @@ class InTripViewModel @Inject constructor(
                             return@mapNotNull null
                         }
                         
-                        val title = when (type) {
+                        var title = when (type) {
                             MarkerType.FRIEND_SOS -> "SOS: ${item.user?.username ?: "Friend"}"
                             MarkerType.OTHER_USER_SOS -> "SOS Alert"
                             else -> item.title ?: "Incident"
+                        }
+                        
+                        // Handle severity for verified reports
+                        if (type == MarkerType.USER_REPORT) {
+                            if (item.severity != null && item.severity > 0) {
+                                title = "$title (Verified)"
+                            }
                         }
 
                         val description = when (type) {
@@ -201,7 +209,8 @@ class InTripViewModel @Inject constructor(
                             position = LatLng(item.latitude, item.longitude),
                             title = title,
                             description = description,
-                            type = type
+                            type = type,
+                            severity = item.severity
                         )
                     }
                     _allMarkers.value = markers
