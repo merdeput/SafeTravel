@@ -44,6 +44,11 @@ interface ApiService {
     @POST("location")
     suspend fun sendLocation(@Body locationData: LocationData): Response<Map<String, Any>>
 
+    @POST("api/weather_place")
+    suspend fun getWeatherPlace(
+        @Query("province_name") provinceName: String
+    ): Response<NewsWeatherResponse>
+
     // --- AUTH ENDPOINTS ---
 
     @POST("api/register")
@@ -258,12 +263,6 @@ interface ApiService {
         @Path("trip_id") tripId: Int,
         @Body tripData: TripBase
     ): Response<TripDTO>
-
-    @GET("api/{location}")
-    suspend fun getNewsAndWeather(
-        @Header("Authorization") token: String,
-        @Path("location") location: String
-    ): Response<NewsWeatherResponse>
 
     // --- INCIDENT ENDPOINTS ---
 

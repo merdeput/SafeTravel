@@ -3,6 +3,8 @@ package com.safetravel.app.ui.home
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -30,19 +32,25 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.safetravel.app.data.model.NewsWeatherResponse
 import com.safetravel.app.data.model.ProvinceData
+import com.safetravel.app.data.model.TravelAdvice
 import com.safetravel.app.data.model.TripDTO
+import com.safetravel.app.data.model.WeatherForecast
+import com.safetravel.app.ui.MainAppViewModel
 
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel(),
+    mainAppViewModel: MainAppViewModel = hiltViewModel(), // Inject MainAppViewModel
     onCreateTripClick: () -> Unit,
     onTripClick: (Int) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val mainAppState by mainAppViewModel.uiState.collectAsState() // Observe MainApp state
 
     // Refresh data when screen appears
     LaunchedEffect(Unit) {
         viewModel.checkActiveTrip()
+        mainAppViewModel.fetchActiveTripReport() // Trigger report fetch
     }
 
     Box(
@@ -78,7 +86,8 @@ fun HomeScreen(
                     item {
                         ActiveTripDashboard(
                             trip = uiState.currentTrip!!,
-                            newsWeather = uiState.newsWeather,
+                            newsWeather = mainAppState.activeTripWeatherReport ?: uiState.newsWeather, // Use active trip report if available
+                            isLoadingReport = mainAppState.isLoadingReport,
                             onManageTrip = { onTripClick(uiState.currentTrip!!.id) }
                         )
                     }
@@ -151,6 +160,7 @@ fun NoTripState(onCreateTripClick: () -> Unit) {
 fun ActiveTripDashboard(
     trip: TripDTO, 
     newsWeather: NewsWeatherResponse?,
+    isLoadingReport: Boolean,
     onManageTrip: () -> Unit
 ) {
     val provinceData = newsWeather?.provinces?.firstOrNull()
@@ -246,19 +256,19 @@ fun ActiveTripDashboard(
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             StatCard(
                 title = "Safety Score",
-                value = score.toString(),
-                subtitle = scoreText,
+                value = if (isLoadingReport && provinceData == null) "--" else "${score}/100", // Added /100
+                subtitle = if (isLoadingReport && provinceData == null) "Loading..." else scoreText,
                 modifier = Modifier.weight(1f),
                 icon = scoreIcon,
-                color = scoreColor
+                color = if (isLoadingReport && provinceData == null) Color.Gray else scoreColor
             )
             StatCard(
                 title = "Weather",
-                value = tempDisplay,
-                subtitle = conditionDisplay,
+                value = if (isLoadingReport && provinceData == null) "--" else tempDisplay,
+                subtitle = if (isLoadingReport && provinceData == null) "Loading..." else conditionDisplay,
                 modifier = Modifier.weight(1f),
                 icon = Icons.Default.WbSunny,
-                color = Color(0xFFFFB300) // Sunny Orange
+                color = if (isLoadingReport && provinceData == null) Color.Gray else Color(0xFFFFB300)
             )
         }
 
@@ -277,8 +287,36 @@ fun ActiveTripDashboard(
         }
         
         // News & Summary Card
-        if (provinceData != null) {
+        if (isLoadingReport) {
+            LoadingCard()
+        } else if (provinceData != null) {
             NewsAndWeatherCard(provinceData, scoreColor)
+        }
+    }
+}
+
+@Composable
+fun LoadingCard() {
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        modifier = Modifier.fillMaxWidth().height(150.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(32.dp),
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "Fetching AI Insights...",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -332,19 +370,38 @@ fun NewsAndWeatherCard(provinceData: ProvinceData, accentColor: Color) {
                 Spacer(modifier = Modifier.height(16.dp))
             }
             
-            // Recent News
-            if (!provinceData.recentNews.isNullOrEmpty()) {
+            // Weather Forecast
+            if (!provinceData.weatherForecast.isNullOrEmpty()) {
                 Text(
-                    text = "Recent Updates",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                     text = "Forecast",
+                     style = MaterialTheme.typography.titleSmall,
+                     fontWeight = FontWeight.Bold,
+                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                
-                provinceData.recentNews.take(3).forEach { news ->
-                    NewsItemRow(news, accentColor)
-                    Spacer(modifier = Modifier.height(12.dp))
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(provinceData.weatherForecast) { weather ->
+                         WeatherForecastCard(weather)
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+            
+            // Travel Advice
+            if (!provinceData.travelAdvice.isNullOrEmpty()) {
+                Text(
+                     text = "Travel Advice",
+                     style = MaterialTheme.typography.titleSmall,
+                     fontWeight = FontWeight.Bold,
+                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                provinceData.travelAdvice.forEach { advice ->
+                    AdviceCard(advice)
+                    Spacer(modifier = Modifier.height(8.dp))
                 }
             }
         }
@@ -352,37 +409,38 @@ fun NewsAndWeatherCard(provinceData: ProvinceData, accentColor: Color) {
 }
 
 @Composable
-fun NewsItemRow(news: com.safetravel.app.data.model.NewsItem, accentColor: Color) {
-    Row(verticalAlignment = Alignment.CenterVertically // FIX
+fun WeatherForecastCard(weather: WeatherForecast) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+        modifier = Modifier.width(100.dp)
     ) {
-        Box(
-            modifier = Modifier
-                .padding(top = 6.dp)
-                .size(6.dp)
-                .clip(RoundedCornerShape(50))
-                .background(accentColor)
+        Column(modifier = Modifier.padding(8.dp)) {
+            Text(text = weather.date ?: "", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+            Text(text = weather.temperature ?: "", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(text = weather.condition ?: "", style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable
+fun AdviceCard(advice: TravelAdvice) {
+    Row(verticalAlignment = Alignment.Top) {
+        Icon(
+            imageVector = if (advice.category == "An toàn") Icons.Default.Warning else Icons.Default.Info,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(16.dp).padding(top = 2.dp)
         )
-        Spacer(modifier = Modifier.width(12.dp))
+        Spacer(modifier = Modifier.width(8.dp))
         Column {
             Text(
-                text = news.title ?: "Unknown Title",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = news.snippet ?: "",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = news.date ?: "",
+                text = advice.category ?: "General",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.outline
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = advice.advice ?: "",
+                style = MaterialTheme.typography.bodySmall
             )
         }
     }
